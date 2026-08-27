@@ -12,11 +12,13 @@ import {
     getObjectives,
     setClock,
     resetState,
+    addObjective,
     removeObjectiveById,
     setObjectiveStatusById,
     parseTimeHM,
     parseDateMDY,
 } from "./state.js";
+import { DEFAULT_INJECTION_INTRO } from "../settings/defaultInjection.js";
 
 export const extensionName = "Chronogram";
 
@@ -30,12 +32,9 @@ function escapeHtml(text) {
         .replaceAll('"', "&quot;");
 }
 
-export const DEFAULT_INJECTION_INTRO = `The following is persistent timekeeping and objective data for this story, tracked across the entire chat.
-
-- The Date/Time values are the AUTHORITATIVE in-fiction current date and time. Treat them as fact even when your previous replies implied otherwise; keep narration consistent with them from now on.
-- Each character has responsibilities and a daily plan. Respect what they are currently doing and where they are expected to be: a character at work is not instantly available; a king holds court whether {{user}} likes it or not. {{user}}'s own duties count too and may pull them away.
-- Objectives are lasting goals for both User and characters. Characters pursue their own objectives off-screen when it makes sense; don't drop them just because they weren't mentioned recently.
-- Do not repeat or quote this data verbatim in your reply.`;
+// The injected wording lives in its own file (mirrors settings/defaultPrompt.js
+// for the tracker prompt) so the format can be tuned without touching logic.
+export { DEFAULT_INJECTION_INTRO };
 
 // Builds the full injected text for the macro.
 export function buildInjectionText() {
@@ -193,6 +192,12 @@ function renderParticipantCard(id, p) {
         </div>`;
 }
 
+// Whether the "add objective" form is folded open. Kept at module level so
+// panel re-renders (which happen on every tracker run) don't slam it shut.
+let _addFormOpen = false;
+// Whether the Objectives drawer is expanded.
+let _objectivesOpen = true;
+
 // The shared HTML used by BOTH the settings-drawer panel and the popup window.
 export function renderPanelHTML() {
     const clock = getClock();
@@ -217,12 +222,21 @@ export function renderPanelHTML() {
         </div>
         <div class="chrono-section-header"><i class="fa-solid fa-users"></i><span>Participants</span></div>
         ${participants.map(([id, p]) => renderParticipantCard(id, p)).join("") || '<div class="chrono-empty-small">No participants yet.</div>'}
-        <div class="chrono-section-header"><i class="fa-solid fa-list-check"></i><span>Objectives</span></div>
-        ${objectiveCards}
-        <div class="chrono-add-objective">
-            <input type="text" id="chrono_new_owner" class="text_pole" placeholder="Owner (blank = User)" style="flex:1;">
-            <input type="text" id="chrono_new_title" class="text_pole" placeholder="New objective title..." style="flex:2;">
-            <button id="chrono_add_objective" class="menu_button menu_button_icon" title="Add objective"><i class="fa-solid fa-plus"></i></button>
+        <div class="chrono-drawer${_objectivesOpen ? "" : " chrono-drawer-closed"}">
+            <div class="chrono-drawer-header" id="chrono_objectives_header" title="Click to collapse or expand objectives">
+                <i class="fa-solid fa-list-check"></i><span>Objectives</span>
+                <button id="chrono_toggle_add_objective" class="menu_button menu_button_icon" title="${_addFormOpen ? "Close the add-objective form" : "Add an objective"}"><i class="fa-solid fa-${_addFormOpen ? "chevron-up" : "plus"}"></i></button>
+                <i class="fa-solid fa-chevron-down chrono-drawer-chevron"></i>
+            </div>
+            <div class="chrono-drawer-content">
+                ${objectiveCards}
+                ${_addFormOpen ? `
+                <div class="chrono-add-objective">
+                    <input type="text" id="chrono_new_title" class="text_pole" placeholder="New objective title..." style="flex:2;">
+                    <input type="text" id="chrono_new_owner" class="text_pole" placeholder="Owner (blank = User)" style="flex:1;">
+                    <button id="chrono_add_objective" class="menu_button menu_button_icon" title="Add objective"><i class="fa-solid fa-check"></i></button>
+                </div>` : ""}
+            </div>
         </div>`;
 }
 
@@ -272,7 +286,20 @@ function bindPanelHandlers($root) {
         refreshChronoPanel();
     });
 
-    $root.on("click", "#chrono_add_objective", () => {
+    // Collapse/expand the objectives drawer (the "+" button inside is excluded).
+    $root.on("click", "#chrono_objectives_header", (e) => {
+        if ($(e.target).closest("#chrono_toggle_add_objective").length > 0) return;
+        _objectivesOpen = !_objectivesOpen;
+        refreshChronoPanel();
+    });
+
+    // "+" in the Objectives header folds the add form in/out.
+    $root.on("click", "#chrono_toggle_add_objective", () => {
+        _addFormOpen = !_addFormOpen;
+        refreshChronoPanel();
+    });
+
+    const submitNewObjective = () => {
         const title = String($root.find("#chrono_new_title").val() || "").trim();
         if (!title) {
             if (typeof toastr !== "undefined") toastr.warning("Give the objective a title first.", "Chronogram");
@@ -280,7 +307,21 @@ function bindPanelHandlers($root) {
         }
         const ownerInput = String($root.find("#chrono_new_owner").val() || "").trim();
         addObjective({ owner: ownerInput || "user", title });
+        _addFormOpen = false;
         refreshChronoPanel();
+    };
+
+    $root.on("click", "#chrono_add_objective", submitNewObjective);
+
+    // Enter inside the form submits it; Escape folds it away.
+    $root.on("keydown", "#chrono_new_title, #chrono_new_owner", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            submitNewObjective();
+        } else if (e.key === "Escape") {
+            _addFormOpen = false;
+            refreshChronoPanel();
+        }
     });
 }
 
