@@ -405,10 +405,14 @@
 }
 
 #chrono_window_content {
-    flex: 1;
-    /* Allow the content to shrink below its intrinsic height, otherwise
-       overflow-y never kicks in and long lists just get clipped. */
-    min-height: 0;
+    /* Positioned absolutely under the header instead of relying on the flex
+       chain: its height is always (window - header), so overflow-y engages
+       reliably no matter what any global stylesheet does to flex items. */
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 41px; /* fallback; set precisely from the header height in JS */
+    bottom: 0;
     overflow-y: auto;
     /* Never scroll sideways: long lines wrap inside their cards instead. */
     overflow-x: hidden;

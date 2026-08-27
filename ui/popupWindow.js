@@ -73,9 +73,9 @@ export class ChronoWindow {
         this.applyPosition();
         // Re-assert flex BEFORE showing: the inline template style is
         // display:none, and jQuery's fadeIn would otherwise restore the div
-        // to its default display:block, losing flex-direction column and
-        // with it the content's scroll behavior.
+        // to its default display:block.
         this.$panel.css("display", "flex").hide().fadeIn(150);
+        this.layoutContent();
         this.isOpen = true;
         savePanelState({ chronoWindowOpen: true });
     }
@@ -89,15 +89,34 @@ export class ChronoWindow {
     refreshContent(html) {
         const $content = $("#chrono_window_content");
         if ($content.length === 0) return;
+        // Keep the reader's place: re-renders happen on every tracker run.
+        const scrollTop = $content.scrollTop();
         $content.html(typeof html === "string" && html.trim()
             ? html
             : '<div class="chrono-empty">No chronogram yet.</div>');
+        this.layoutContent();
+        $content.scrollTop(scrollTop);
+    }
+
+    // Pins the scrollable content exactly below the header (measured, so any
+    // font/padding change is handled) and above the window's bottom edge.
+    layoutContent() {
+        const $header = $("#chrono_window_header");
+        const $content = $("#chrono_window_content");
+        if ($header.length === 0 || $content.length === 0) return;
+        const top = Math.max(0, Math.round($header.outerHeight()) || 41);
+        $content.css("top", `${top}px`);
     }
 
     applyPosition() {
         const top = this.pos.top ?? Math.max(0, Math.round((window.innerHeight - this.pos.height) / 2));
         const left = this.pos.left ?? Math.max(0, window.innerWidth - this.pos.width - 40);
-        this.$panel.css({ width: this.pos.width, height: this.pos.height, top, left });
+        // Never let a stale saved size push the window off-screen: an
+        // off-screen-height window looks exactly like "scrolling is broken".
+        const height = Math.max(240, Math.min(this.pos.height, window.innerHeight - 20));
+        this.pos.height = height;
+        this.$panel.css({ width: this.pos.width, height, top, left });
+        this.layoutContent();
     }
 
     // --- dragging (header) ------------------------------------------------------
