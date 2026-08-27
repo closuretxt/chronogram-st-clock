@@ -737,6 +737,44 @@ export function restoreStateUpTo(messageId) {
     return false;
 }
 
+// Keeps manual edits (clock, objectives) in sync with the newest per-message
+// snapshot. The snapshot stores the state AS OF the moment its message was
+// tracked, so anything changed by hand afterwards would be silently discarded
+// on the next swipe or manual re-run (both restore from that snapshot).
+// Refreshing it with a copy of the current state makes rollbacks land on the
+// edited values instead of the stale ones.
+export function updateLatestSnapshot() {
+    const st = getST();
+    const chat = st.chat || [];
+    const fresh = createSnapshot();
+    if (!fresh) return false;
+    for (let i = chat.length - 1; i >= 0; i--) {
+        if (chat[i]?.extra?.chrono_snapshot) {
+            chat[i].extra.chrono_snapshot = fresh;
+            if (typeof st.saveChat === "function") st.saveChat();
+            return true;
+        }
+    }
+    return false;
+}
+
+// Wipes every per-message snapshot in the chat. Used by the full "Reset Chat
+// Data" flow: without this, the next swipe would restore an old snapshot and
+// resurrect data the user just deleted.
+export function clearAllSnapshots() {
+    const st = getST();
+    const chat = st.chat || [];
+    let removed = 0;
+    for (const msg of chat) {
+        if (msg?.extra?.chrono_snapshot) {
+            delete msg.extra.chrono_snapshot;
+            removed++;
+        }
+    }
+    if (removed > 0 && typeof st.saveChat === "function") st.saveChat();
+    return removed;
+}
+
 
 
 

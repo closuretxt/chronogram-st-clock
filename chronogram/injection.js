@@ -23,6 +23,7 @@ import {
     stripCurrentMarker,
 } from "./state.js";
 import { DEFAULT_INJECTION_INTRO } from "../settings/defaultInjection.js";
+import { updateLatestSnapshot, clearAllSnapshots } from "./tracker.js";
 
 export const extensionName = "Chronogram";
 
@@ -364,26 +365,33 @@ function bindPanelHandlers() {
             return;
         }
         setClock(date, time);
+        // Sync the newest snapshot, otherwise the next swipe/manual re-run
+        // would restore the pre-edit clock and discard this change.
+        updateLatestSnapshot();
         refreshChronoPanel();
     });
 
     $doc.on("click", ".chrono-obj-complete", function () {
         setObjectiveStatusById(String($(this).data("obj")), "completed");
+        updateLatestSnapshot();
         refreshChronoPanel();
     });
 
     $doc.on("click", ".chrono-obj-abandon", function () {
         setObjectiveStatusById(String($(this).data("obj")), "abandoned");
+        updateLatestSnapshot();
         refreshChronoPanel();
     });
 
     $doc.on("click", ".chrono-obj-reactivate", function () {
         setObjectiveStatusById(String($(this).data("obj")), "active");
+        updateLatestSnapshot();
         refreshChronoPanel();
     });
 
     $doc.on("click", ".chrono-obj-remove", function () {
         removeObjectiveById(String($(this).data("obj")));
+        updateLatestSnapshot();
         refreshChronoPanel();
     });
 
@@ -416,6 +424,7 @@ function bindPanelHandlers() {
         }
         const ownerInput = String($form.find("#chrono_new_owner").val() || "").trim();
         addObjective({ owner: ownerInput || "user", title });
+        updateLatestSnapshot();
         _addFormOpen = false;
         refreshChronoPanel();
     };
@@ -447,6 +456,9 @@ export function initPanelHandlers() {
 // Manual reset button support.
 export function resetChatData() {
     resetState();
+    // Drop every per-message snapshot too, or the next swipe would restore an
+    // old snapshot and resurrect the data the user just deleted.
+    clearAllSnapshots();
     refreshChronoPanel();
 }
 

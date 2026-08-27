@@ -342,6 +342,12 @@ export function setClock(date, time) {
     if (!root) return null;
     root.clock = { date: String(date).trim(), time: String(time).trim() };
     root.anchored = true;
+    // A clock set (manually via the panel, or by the tracker) becomes the new
+    // "previously tracked moment": the NEXT run's elapsed-time computation
+    // must measure from HERE, not from the previous automatic run. Without
+    // this, a manual edit doesn't move the tracker's reference point and the
+    // LLM advances the clock relative to the pre-edit timeline.
+    root.lastRunAt = Date.now();
     saveState();
     return root.clock;
 }
@@ -352,6 +358,7 @@ export function tickClock(ms) {
     const root = getStateRoot();
     if (!root?.clock) return null;
     root.clock = advanceClock(root.clock, ms);
+    root.lastRunAt = Date.now(); // this run just re-anchored the timeline
     saveState();
     return root.clock;
 }
