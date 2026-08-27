@@ -419,9 +419,16 @@
     /* Never scroll sideways: long lines wrap inside their cards instead. */
     overflow-x: hidden;
     padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    /* Plain BLOCK layout on purpose: as a flex column, flex-shrink crushed
+       the cards (the drawers have overflow:hidden, giving them a zero flex
+       minimum) so the content never overflowed and the scrollbar never
+       appeared. Block children keep their full height and overflow properly. */
+    display: block;
+}
+
+/* Spacing between the stacked cards (replaces the old flex `gap`). */
+#chrono_window_content > * + * {
+    margin-top: 10px;
 }
 
 #chrono_window_resize {
