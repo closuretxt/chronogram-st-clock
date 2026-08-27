@@ -1,41 +1,86 @@
 /* Chronogram - ST Clock & Objective Tracker */
+/* Visual language follows the Persist - Relationship Tracker styles:
+   theme-variable glass cards, chip badges, animated gradient pipeline. */
 
 /* ---------- Settings drawer ---------- */
+.chrono_settings_content {
+    padding-top: 4px;
+}
+
+/* Macro reminder warning (amber, Persist-style) */
 .chrono-warning {
-    background: rgba(224, 90, 122, 0.12);
-    border: 1px solid rgba(224, 90, 122, 0.35);
+    margin-bottom: 10px;
+    padding: 8px 12px;
     border-radius: 8px;
-    padding: 8px 10px;
-    margin-bottom: 8px;
+    border: 1px solid rgba(255, 200, 60, 0.45);
+    background: rgba(255, 200, 60, 0.08);
+    color: #ffd76e;
     font-size: 0.92em;
+    line-height: 1.5;
+}
+
+.chrono-warning code {
+    background: rgba(0, 0, 0, 0.35);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+    color: #ffe9a8;
+}
+
+.chrono_settings_content h4 {
+    margin: 8px 0;
+    color: var(--SmartThemeBodyColor);
+}
+
+/* Native-looking checkboxes inside the settings drawer */
+.chrono_settings_content label.checkbox_label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    cursor: pointer;
+}
+
+.chrono_settings_content label.checkbox_label input[type="checkbox"] {
+    margin: 0;
+    flex-shrink: 0;
+    width: auto;
+    height: auto;
+    appearance: auto;
+    -webkit-appearance: checkbox;
 }
 
 #chrono_panel {
-    margin-top: 10px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    margin-top: 8px;
 }
 
 .chrono-empty {
-    opacity: 0.65;
+    opacity: 0.7;
     font-style: italic;
     padding: 12px 6px;
     text-align: center;
 }
 
 .chrono-empty-small {
-    opacity: 0.55;
+    opacity: 0.6;
+    font-style: italic;
     font-size: 0.88em;
     padding: 2px 0;
 }
 
 /* ---------- Clock card ---------- */
 .chrono-clock-card {
-    background: linear-gradient(135deg, rgba(96, 125, 255, 0.14), rgba(96, 200, 255, 0.08));
-    border: 1px solid rgba(96, 150, 255, 0.3);
+    border: 1px solid rgba(96, 150, 255, 0.35);
     border-radius: 10px;
     padding: 10px;
+    background:
+        linear-gradient(135deg, rgba(96, 125, 255, 0.14), rgba(96, 200, 255, 0.07)),
+        var(--black30a, rgba(0, 0, 0, 0.2));
+    box-shadow: 0 0 10px rgba(96, 150, 255, 0.12);
 }
 
 .chrono-clock-header {
@@ -43,7 +88,11 @@
     align-items: center;
     gap: 6px;
     font-weight: bold;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+}
+
+.chrono-clock-header i {
+    color: #7ab7ff;
 }
 
 .chrono-clock-value {
@@ -54,6 +103,8 @@
 
 .chrono-clock-value input {
     text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-weight: bold;
 }
 
 /* ---------- Section headers ---------- */
@@ -63,42 +114,56 @@
     gap: 6px;
     font-weight: bold;
     font-size: 0.95em;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.25));
     padding-bottom: 3px;
+}
+
+.chrono-section-header i {
+    color: var(--SmartThemeQuoteColor, #7ab7ff);
+    font-size: 0.95em;
 }
 
 /* ---------- Participants ---------- */
 .chrono-participant {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(128, 128, 128, 0.18);
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.18));
     border-radius: 10px;
-    padding: 8px;
+    padding: 10px;
+    background-color: var(--black30a, rgba(0, 0, 0, 0.2));
 }
 
 .chrono-participant-header {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
+    margin-bottom: 4px;
 }
 
 .chrono-name {
     font-weight: bold;
+    font-size: 1.05em;
 }
 
 .chrono-doing {
     width: 100%;
     font-size: 0.9em;
+    font-style: italic;
     opacity: 0.85;
     margin-top: 3px;
+}
+
+.chrono-doing i {
+    color: var(--SmartThemeQuoteColor, #7ab7ff);
+    font-style: normal;
+    opacity: 0.9;
 }
 
 .chrono-schedule {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    margin-top: 6px;
-    padding-left: 4px;
+    gap: 3px;
+    margin-top: 8px;
+    padding: 2px 0 2px 8px;
     border-left: 2px solid rgba(96, 150, 255, 0.35);
 }
 
@@ -106,61 +171,98 @@
     font-size: 0.85em;
     display: flex;
     gap: 8px;
+    align-items: baseline;
+    padding: 1px 6px;
+    border-radius: 6px;
 }
 
 .chrono-sched-time {
     font-variant-numeric: tabular-nums;
     font-weight: bold;
     min-width: 44px;
+    opacity: 0.85;
 }
 
+/* Current activity: teal highlight pill (Persist notification accent) */
 .chrono-sched-now {
-    color: #7ab7ff;
+    color: #4ae2c0;
     font-weight: bold;
+    background: rgba(74, 226, 192, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(74, 226, 192, 0.25);
 }
 
-/* ---------- Badges & tags ---------- */
+.chrono-sched-now .chrono-sched-time {
+    opacity: 1;
+}
+
+/* ---------- Badges & tags (chip style) ---------- */
 .chrono-badge {
-    background: rgba(128, 128, 128, 0.25);
-    border-radius: 999px;
+    display: inline-block;
+    color: var(--SmartThemeEmColor, #b5b5b5);
+    background-color: rgba(128, 128, 128, 0.12);
+    border: 1px solid rgba(128, 128, 128, 0.35);
+    border-radius: 9px;
     font-size: 0.72em;
+    font-weight: bold;
     padding: 1px 8px;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
 }
 
-.chrono-badge-active { background: rgba(80, 200, 120, 0.25); }
-.chrono-badge-completed { background: rgba(96, 150, 255, 0.28); }
-.chrono-badge-abandoned { background: rgba(220, 100, 100, 0.28); }
+.chrono-badge-active {
+    color: #7ddb91;
+    background-color: rgba(125, 219, 145, 0.08);
+    border-color: rgba(125, 219, 145, 0.45);
+}
+
+.chrono-badge-completed {
+    color: #8fb8ff;
+    background-color: rgba(96, 150, 255, 0.1);
+    border-color: rgba(96, 150, 255, 0.45);
+}
+
+.chrono-badge-abandoned {
+    color: #ff8f7a;
+    background-color: rgba(255, 143, 122, 0.08);
+    border-color: rgba(255, 143, 122, 0.45);
+}
 
 .chrono-owner-tag {
-    background: rgba(150, 100, 220, 0.22);
-    border-radius: 999px;
+    display: inline-block;
+    color: #cf9ff5;
+    background-color: rgba(160, 74, 226, 0.1);
+    border: 1px solid rgba(160, 74, 226, 0.45);
+    border-radius: 9px;
     font-size: 0.75em;
+    font-weight: bold;
     padding: 1px 8px;
+    white-space: nowrap;
 }
 
 /* ---------- Objectives ---------- */
 .chrono-objective {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(128, 128, 128, 0.18);
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.18));
     border-radius: 10px;
-    padding: 8px;
+    padding: 8px 10px;
+    background-color: var(--black30a, rgba(0, 0, 0, 0.2));
 }
 
 .chrono-objective-inactive {
-    opacity: 0.55;
+    opacity: 0.65;
+    border-style: dashed;
 }
 
 .chrono-objective-header {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 
 .chrono-objective-title {
     font-weight: bold;
+    font-size: 1.02em;
 }
 
 .chrono-actions {
@@ -172,18 +274,27 @@
 .chrono-actions .menu_button {
     padding: 2px 6px;
     font-size: 0.82em;
+    background: transparent;
+    border: none;
+    opacity: 0.7;
+}
+
+.chrono-actions .menu_button:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .chrono-objective-desc {
     font-size: 0.88em;
     opacity: 0.85;
-    margin-top: 3px;
+    margin-top: 4px;
+    line-height: 1.45;
 }
 
 .chrono-objective-meta {
     font-size: 0.8em;
-    opacity: 0.75;
-    margin-top: 2px;
+    opacity: 0.7;
+    margin-top: 3px;
 }
 
 /* ---------- Add objective row ---------- */
@@ -193,29 +304,38 @@
     gap: 6px;
 }
 
-/* ---------- Floating popup window ---------- */
+.chrono-add-objective input.text_pole {
+    min-width: 0;
+}
+
+/* ---------- Floating popup window (Persist side-panel pattern) ---------- */
 #chrono_window {
     position: fixed;
     z-index: 99999;
     display: none;
     flex-direction: column;
-    background: var(--SmartThemeBlurTintColor, #1a1a1f);
+    background: var(--SmartThemeBlurTintColor, rgba(24, 24, 34, 0.95));
     color: var(--SmartThemeBodyColor, #ddd);
-    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.15));
-    border-radius: 12px;
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 10px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    overflow: hidden;
 }
 
 #chrono_window_header {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 10px;
+    padding: 8px 12px;
     font-weight: bold;
+    font-size: 0.95em;
     cursor: move;
     user-select: none;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
+    flex-shrink: 0;
 }
 
 #chrono_window_header span {
@@ -227,6 +347,12 @@
     border: none;
     cursor: pointer;
     color: inherit;
+    opacity: 0.7;
+    padding: 2px 6px;
+}
+
+#chrono_window_close:hover {
+    opacity: 1;
 }
 
 #chrono_window_content {
@@ -245,39 +371,42 @@
     width: 16px;
     height: 16px;
     cursor: nwse-resize;
-    border-right: 3px solid rgba(128, 128, 128, 0.5);
-    border-bottom: 3px solid rgba(128, 128, 128, 0.5);
-    border-bottom-right-radius: 10px;
+    background:
+        linear-gradient(135deg, transparent 50%, var(--SmartThemeBorderColor, #666) 50%, var(--SmartThemeBorderColor, #666) 60%, transparent 60%, transparent 70%, var(--SmartThemeBorderColor, #666) 70%, var(--SmartThemeBorderColor, #666) 80%, transparent 80%);
 }
 
-/* ---------- Tracker pipeline progress bar ---------- */
+/* ---------- Tracker pipeline progress bar (copied from Persist) ---------- */
 #chrono_progress_bar {
     display: none;
     position: fixed;
+    top: 60px;
     left: 50%;
     transform: translateX(-50%);
-    bottom: 110px;
     z-index: 99998;
     width: min(480px, 80vw);
-    padding: 8px 12px;
-    background: var(--SmartThemeBlurTintColor, #1a1a1f);
-    color: var(--SmartThemeBodyColor, #ddd);
-    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.15));
+    min-width: 300px;
+    padding: 12px 22px;
+    background: var(--SmartThemeBlurTintColor, rgba(28, 28, 38, 0.92));
+    color: var(--SmartThemeBodyColor, #eee);
+    border: 1px solid var(--SmartThemeBorderColor, #444);
     border-radius: 10px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
     backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     font-size: 0.9em;
+    text-align: center;
 }
 
 .chrono-progress-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
 
 #chrono_progress_text {
     flex: 1;
+    text-align: left;
 }
 
 #chrono_stop_pipeline {
@@ -286,18 +415,85 @@
 }
 
 #chrono_progress_track {
-    height: 6px;
+    height: 8px;
     border-radius: 999px;
-    background: rgba(128, 128, 128, 0.25);
+    background: var(--black30a, rgba(0, 0, 0, 0.35));
     overflow: hidden;
 }
 
 #chrono_progress_fill {
     height: 100%;
     width: 0%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, rgba(96, 150, 255, 0.9), rgba(96, 200, 255, 0.9));
-    transition: width 0.3s ease;
+    border-radius: 4px;
+    background: linear-gradient(
+        90deg,
+        #e05a7a 0%,
+        #a04ae2 33%,
+        #4ae2c0 66%,
+        #e05a7a 100%
+    );
+    background-size: 200% 100%;
+    transition: width 0.35s ease;
+    animation: chrono-gradient-shift 2.4s linear infinite;
+}
+
+@keyframes chrono-gradient-shift {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+
+/* ---------- Input Area Processing Indicator (copied from Persist) ---------- */
+
+/* Ensure the form wrapper can anchor ::before/::after */
+#form_sheld {
+    position: relative;
+}
+
+/* Animated gradient bar that runs across the top of the input box */
+#form_sheld.chrono-input-active::before {
+    content: '';
+    position: absolute;
+    top: -5px;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: linear-gradient(
+        90deg,
+        #e05a7a 0%,
+        #a04ae2 33%,
+        #4ae2c0 66%,
+        #e05a7a 100%
+    );
+    background-size: 200% 100%;
+    border-radius: 10px;
+    filter: brightness(1.2);
+    animation: chrono-underline-sweep 1.8s linear infinite;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+/* Soft glow emanating downward from the bar into the input area */
+#form_sheld.chrono-input-active::after {
+    content: '';
+    position: absolute;
+    top: -5px;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(
+        180deg,
+        rgba(224, 90, 122, 0.1) 0%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: chrono-underline-sweep 2.4s linear infinite reverse;
+    pointer-events: none;
+    z-index: 999;
+}
+
+@keyframes chrono-underline-sweep {
+    0%   { background-position: 100% 50%; }
+    100% { background-position: -100% 50%; }
 }
 
 /* Shield the chat input while the tracker pipeline is running */
