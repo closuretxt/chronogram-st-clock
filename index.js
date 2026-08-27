@@ -16,7 +16,7 @@ import { initPopupWindow, toggleChronoWindow } from "./ui/popupWindow.js";
 
 // Setup
 export const extensionName = "Chronogram";
-const extensionFolderPath = `scripts/extensions/third-party/persist-ST-relationship-tracker/chronogram`;
+const extensionFolderPath = `scripts/extensions/third-party/chronogram-st-clock`;
 
 // Startup
 jQuery(async () => {
