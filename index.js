@@ -3,7 +3,7 @@
 // swipe/delete rollback for the per-chat chronogram state.
 
 // IMPORTS
-import { extension_settings, getContext } from "../../../../extensions.js";
+import { extension_settings, getContext } from "../../../extensions.js";
 // Settings
 import { loadSettings, saveSettings, defaultSettings, initSettingsListeners, applySettingsToUI } from "./settings/settingsManager.js";
 export { loadSettings, saveSettings, defaultSettings };
@@ -20,7 +20,7 @@ const extensionFolderPath = `scripts/extensions/third-party/chronogram-st-clock`
 
 // Startup
 jQuery(async () => {
-    const settingsHtml = await $.get(`${extensionFolderPath}index.html`);
+    const settingsHtml = await $.get(`${extensionFolderPath}/index.html`);
     const tempDiv = $("<div>").html(settingsHtml);
 
     $("#extensions_settings").append(tempDiv.children());
