@@ -4,7 +4,6 @@
 // holds the tracker LLM's system prompt.
 
 export const DEFAULT_INJECTION_INTRO = `Background timekeeping info for this story, tracked across the chat.
-
 - The date and time below are the current in-fiction moment; keep the narration consistent with them.
 - The characters listed are around right now. Anyone not listed is elsewhere, living their own day.
 - Each character shows what they're up to next and a rough outline of the rest of their day. Someone mid-task won't be instantly free, and {{user}} has plans of their own that may pull them away too.

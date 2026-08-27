@@ -98,8 +98,8 @@ export function buildInjectionText() {
         }
 
         const parts = [];
-        if (now) parts.push(`Now:${stripCurrentMarker(now.activity)}`);
-        if (upcoming.length > 0) parts.push(`Next:${upcoming[0].time} ${stripCurrentMarker(upcoming[0].activity)}`);
+        if (now) parts.push(`Now: ${stripCurrentMarker(now.activity)}`);
+        if (upcoming.length > 0) parts.push(`Next: ${upcoming[0].time} ${stripCurrentMarker(upcoming[0].activity)}`);
         const rest = upcoming.slice(1);
         if (rest.length > 0) {
             parts.push(`Plan for today: ${rest.map(e => `${e.time} ${stripCurrentMarker(e.activity)}`).join("; ")}.`);
