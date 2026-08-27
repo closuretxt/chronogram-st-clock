@@ -74,10 +74,12 @@
 
 /* ---------- Clock card ---------- */
 .chrono-clock-card {
-    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.18));
+    border: 1px solid rgba(110, 140, 200, 0.28);
     border-radius: 10px;
     padding: 10px;
-    background-color: var(--black30a, rgba(0, 0, 0, 0.2));
+    background:
+        linear-gradient(135deg, rgba(96, 125, 255, 0.07), rgba(96, 200, 255, 0.04)),
+        var(--black30a, rgba(0, 0, 0, 0.2));
 }
 
 .chrono-clock-header {
@@ -109,6 +111,11 @@
     font-size: 0.95em;
     border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.25));
     padding-bottom: 3px;
+}
+
+.chrono-section-header i,
+.chrono-drawer-header > i:first-child {
+    opacity: 0.8;
 }
 
 /* ---------- Objectives drawer (collapsible) ---------- */
@@ -226,17 +233,18 @@
     opacity: 0.85;
 }
 
-/* Current activity: quiet monochrome highlight */
+/* Current activity: soft blue accent (kept subtle) */
 .chrono-sched-now {
+    color: #9ec4ee;
     font-weight: bold;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(122, 183, 255, 0.07);
 }
 
 .chrono-sched-now .chrono-sched-time {
     opacity: 1;
 }
 
-/* ---------- Badges & tags (minimal monochrome chips) ---------- */
+/* ---------- Badges & tags (subdued color chips) ---------- */
 .chrono-badge {
     display: inline-block;
     color: var(--SmartThemeEmColor, #b5b5b5);
@@ -251,11 +259,30 @@
     white-space: nowrap;
 }
 
+.chrono-badge-active {
+    color: #9ed4ab;
+    border-color: rgba(125, 219, 145, 0.3);
+    background-color: rgba(125, 219, 145, 0.06);
+}
+
+.chrono-badge-completed {
+    color: #a7c4ee;
+    border-color: rgba(125, 169, 224, 0.3);
+    background-color: rgba(125, 169, 224, 0.06);
+}
+
+.chrono-badge-abandoned {
+    color: #eda69a;
+    border-color: rgba(224, 143, 122, 0.3);
+    background-color: rgba(224, 143, 122, 0.06);
+}
+
 .chrono-owner-tag {
     display: inline-block;
-    color: var(--SmartThemeEmColor, #b5b5b5);
-    background-color: rgba(128, 128, 128, 0.12);
-    border: 1px solid rgba(128, 128, 128, 0.35);
+    color: #c9aee8;
+    border-color: rgba(180, 140, 224, 0.3);
+    background-color: rgba(180, 140, 224, 0.06);
+    border: 1px solid rgba(180, 140, 224, 0.3);
     border-radius: 9px;
     font-size: 0.75em;
     font-weight: bold;

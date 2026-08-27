@@ -250,74 +250,86 @@ export function refreshChronoPanel() {
     import("../ui/popupWindow.js").then(({ refreshPopupContent }) => refreshPopupContent(html)).catch(() => {});
 }
 
-function bindPanelHandlers($root) {
-    $root.on("click", "#chrono_clock_save", () => {
-        const date = String($root.find("#chrono_clock_date").val() || "").trim();
-        const time = String($root.find("#chrono_clock_time").val() || "").trim();
+// Handlers are delegated on the document ONCE, so they work for both the
+// settings-drawer panel and the floating popup no matter which one is created
+// first (the popup's DOM didn't exist at startup, which is why per-container
+// binding silently never bound popup handlers). Lookups are scoped through
+// .closest() because the same markup/ids exist in both containers.
+function bindPanelHandlers() {
+    const $doc = $(document);
+
+    const warn = (msg) => { if (typeof toastr !== "undefined") toastr.warning(msg, "Chronogram"); };
+
+    $doc.on("click", "#chrono_clock_save", function () {
+        const $row = $(this).closest(".chrono-clock-value");
+        const date = String($row.find("#chrono_clock_date").val() || "").trim();
+        const time = String($row.find("#chrono_clock_time").val() || "").trim();
         if (!parseDateMDY(date)) {
-            if (typeof toastr !== "undefined") toastr.warning("Use MM/DD/YYYY for the date.", "Chronogram");
+            warn("Use MM/DD/YYYY for the date.");
             return;
         }
         if (parseTimeHM(time) === null) {
-            if (typeof toastr !== "undefined") toastr.warning("Use HH:MM (24h) for the time.", "Chronogram");
+            warn("Use HH:MM (24h) for the time.");
             return;
         }
         setClock(date, time);
         refreshChronoPanel();
     });
 
-    $root.on("click", ".chrono-obj-complete", function () {
+    $doc.on("click", ".chrono-obj-complete", function () {
         setObjectiveStatusById(String($(this).data("obj")), "completed");
         refreshChronoPanel();
     });
 
-    $root.on("click", ".chrono-obj-abandon", function () {
+    $doc.on("click", ".chrono-obj-abandon", function () {
         setObjectiveStatusById(String($(this).data("obj")), "abandoned");
         refreshChronoPanel();
     });
 
-    $root.on("click", ".chrono-obj-reactivate", function () {
+    $doc.on("click", ".chrono-obj-reactivate", function () {
         setObjectiveStatusById(String($(this).data("obj")), "active");
         refreshChronoPanel();
     });
 
-    $root.on("click", ".chrono-obj-remove", function () {
+    $doc.on("click", ".chrono-obj-remove", function () {
         removeObjectiveById(String($(this).data("obj")));
         refreshChronoPanel();
     });
 
     // Collapse/expand the objectives drawer (the "+" button inside is excluded).
-    $root.on("click", "#chrono_objectives_header", (e) => {
+    $doc.on("click", "#chrono_objectives_header", (e) => {
         if ($(e.target).closest("#chrono_toggle_add_objective").length > 0) return;
         _objectivesOpen = !_objectivesOpen;
         refreshChronoPanel();
     });
 
     // "+" in the Objectives header folds the add form in/out.
-    $root.on("click", "#chrono_toggle_add_objective", () => {
+    $doc.on("click", "#chrono_toggle_add_objective", () => {
         _addFormOpen = !_addFormOpen;
         refreshChronoPanel();
     });
 
-    const submitNewObjective = () => {
-        const title = String($root.find("#chrono_new_title").val() || "").trim();
+    const submitNewObjective = ($form) => {
+        const title = String($form.find("#chrono_new_title").val() || "").trim();
         if (!title) {
-            if (typeof toastr !== "undefined") toastr.warning("Give the objective a title first.", "Chronogram");
+            warn("Give the objective a title first.");
             return;
         }
-        const ownerInput = String($root.find("#chrono_new_owner").val() || "").trim();
+        const ownerInput = String($form.find("#chrono_new_owner").val() || "").trim();
         addObjective({ owner: ownerInput || "user", title });
         _addFormOpen = false;
         refreshChronoPanel();
     };
 
-    $root.on("click", "#chrono_add_objective", submitNewObjective);
+    $doc.on("click", "#chrono_add_objective", function () {
+        submitNewObjective($(this).closest(".chrono-add-objective"));
+    });
 
     // Enter inside the form submits it; Escape folds it away.
-    $root.on("keydown", "#chrono_new_title, #chrono_new_owner", (e) => {
+    $doc.on("keydown", "#chrono_new_title, #chrono_new_owner", function (e) {
         if (e.key === "Enter") {
             e.preventDefault();
-            submitNewObjective();
+            submitNewObjective($(this).closest(".chrono-add-objective"));
         } else if (e.key === "Escape") {
             _addFormOpen = false;
             refreshChronoPanel();
@@ -330,8 +342,7 @@ let _handlersBound = false;
 export function initPanelHandlers() {
     if (_handlersBound) return;
     _handlersBound = true;
-    bindPanelHandlers($("#chrono_panel"));
-    bindPanelHandlers($("#chrono_window_content")); // popup shares the same markup/handlers
+    bindPanelHandlers();
 }
 
 // Manual reset button support.
