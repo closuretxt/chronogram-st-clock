@@ -8,6 +8,7 @@ export const defaultSettings = {
     autorun: true, // Run the tracker automatically after AI messages
     trackCharacters: true, // Track per-character activities + daily chronograms
     trackObjectives: true, // Track long-term objectives
+    showProgressBar: false, // Show the floating progress bar while the tracker runs
     autoRunInterval: 1, // Run every X turns (a turn = one user+AI exchange)
     delayTrigger: 0, // Seconds to wait before sending the tracker request
     contextDepth: 10, // How many past messages are sent to the tracker FOR CONTEXT ONLY
@@ -78,7 +79,7 @@ function debounce(fn) {
 }
 
 export function initSettingsListeners() {
-    $("#chrono_enabled, #chrono_autorun, #chrono_track_characters, #chrono_track_objectives, #chrono_legacy_api, #chrono_debug_mode, #chrono_include_persona, #chrono_include_scenario, #chrono_include_char_card, #chrono_include_world_info, #chrono_include_wi_outlets, #chrono_context_as_roles").on("change", saveSettings);
+    $("#chrono_enabled, #chrono_autorun, #chrono_track_characters, #chrono_track_objectives, #chrono_show_progress_bar, #chrono_legacy_api, #chrono_debug_mode, #chrono_include_persona, #chrono_include_scenario, #chrono_include_char_card, #chrono_include_world_info, #chrono_include_wi_outlets, #chrono_context_as_roles").on("change", saveSettings);
     $("#chrono_inject_format, #chrono_notification_level").on("change", saveSettings);
     $("#chrono_profile").on("change", saveSettings);
 
@@ -95,6 +96,7 @@ export function saveSettings() {
     s.autorun = $("#chrono_autorun").prop("checked");
     s.trackCharacters = $("#chrono_track_characters").prop("checked");
     s.trackObjectives = $("#chrono_track_objectives").prop("checked");
+    s.showProgressBar = $("#chrono_show_progress_bar").prop("checked");
     s.legacy_api = $("#chrono_legacy_api").prop("checked");
     s.debug_mode = $("#chrono_debug_mode").prop("checked");
     s.trackerIncludePersona = $("#chrono_include_persona").prop("checked");
@@ -126,6 +128,7 @@ export function applySettingsToUI() {
     $("#chrono_autorun").prop("checked", s.autorun === true);
     $("#chrono_track_characters").prop("checked", s.trackCharacters !== false);
     $("#chrono_track_objectives").prop("checked", s.trackObjectives !== false);
+    $("#chrono_show_progress_bar").prop("checked", s.showProgressBar !== false);
     $("#chrono_legacy_api").prop("checked", s.legacy_api === true);
     $("#chrono_debug_mode").prop("checked", s.debug_mode === true);
     $("#chrono_include_persona").prop("checked", s.trackerIncludePersona !== false);
