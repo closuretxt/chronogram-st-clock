@@ -362,7 +362,9 @@
 /* ---------- Floating popup window (Persist side-panel pattern) ---------- */
 #chrono_window {
     position: fixed;
-    z-index: 99999;
+    /* Lowest priority: sits below all other UI layers (chat, drawers, toasts).
+       Raise this only if it ends up fully buried behind opaque containers. */
+    z-index: 1;
     display: none;
     flex-direction: column;
     background: var(--SmartThemeBlurTintColor, rgba(24, 24, 34, 0.95));

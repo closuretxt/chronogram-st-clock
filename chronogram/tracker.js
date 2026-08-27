@@ -23,6 +23,8 @@ import {
     tickClock,
     getOrCreateParticipant,
     getParticipants,
+    getActiveParticipants,
+    updateActiveParticipants,
     replaceSchedule,
     pruneSchedules,
     getScheduleFor,
@@ -33,6 +35,7 @@ import {
     createSnapshot,
     restoreSnapshot,
     saveState,
+    stripCurrentMarker,
 } from "./state.js";
 import { parseChronoResponse } from "./parser.js";
 import { pipelineBar } from "../ui/pipelineBar.js";
@@ -98,8 +101,14 @@ function computeElapsedMs() {
 // ---------------------------------------------------------------------------
 
 function buildCurrentStateBlock() {
+    const settings = extension_settings[extensionName] || {};
+    const trackCharacters = settings.trackCharacters !== false;
+    const trackObjectives = settings.trackObjectives !== false;
+
     const clock = getClock();
-    const participants = getParticipants();
+    // Only participants still present in the story context reach the tracker:
+    // archived ones keep their data but are invisible until they reappear.
+    const participants = trackCharacters ? getActiveParticipants() : {};
     const objectives = (getStateRoot()?.objectives || []);
     const lines = [];
 
@@ -108,43 +117,47 @@ function buildCurrentStateBlock() {
         ? `Current world clock: Date:${clock.date} Time:${clock.time}`
         : "Current world clock: NOT ESTABLISHED YET");
 
-    const entries = Object.entries(participants);
-    if (entries.length === 0) {
-        lines.push("Participants: none tracked yet.");
-    } else {
-        lines.push("Participants (current activity + today's plan):");
-        for (const [id, p] of entries) {
-            lines.push(`<participant name="${id}">`);
-            lines.push(`Doing:${p.activity || "(unknown)"}`);
-            if (clock?.date) {
-                const sched = getScheduleFor(id, clock.date);
-                if (sched.length > 0) {
-                    for (const e of sched) lines.push(`${e.time} ${e.activity}`);
-                } else {
-                    lines.push("(no schedule for today)");
+    if (trackCharacters) {
+        const entries = Object.entries(participants);
+        if (entries.length === 0) {
+            lines.push("Participants: none tracked yet.");
+        } else {
+            lines.push("Participants (PRESENT characters only - current activity + today's plan):");
+            for (const [id, p] of entries) {
+                lines.push(`<participant name="${id}">`);
+                lines.push(`Doing:${p.activity || "(unknown)"}`);
+                if (clock?.date) {
+                    const sched = getScheduleFor(id, clock.date);
+                    if (sched.length > 0) {
+                        for (const e of sched) lines.push(`${e.time} ${stripCurrentMarker(e.activity)}`);
+                    } else {
+                        lines.push("(no schedule for today)");
+                    }
                 }
+                lines.push(`</participant>`);
             }
-            lines.push(`</participant>`);
         }
     }
 
-    const active = objectives.filter(o => o.status === "active");
-    const done = objectives.filter(o => o.status !== "active").slice(-5); // recent history only
-    if (active.length === 0 && done.length === 0) {
-        lines.push("Objectives: none yet.");
-    } else {
-        lines.push("Long-term objectives (reference Titles EXACTLY as written):");
-        for (const o of [...active, ...done]) {
-            const bits = [
-                `Owner:${o.owner}`,
-                `Title:${o.title}`,
-                o.description ? `Description:${o.description}` : "",
-                o.deadline ? `Deadline:${o.deadline}` : "",
-                o.steps ? `Steps:${o.steps}` : "",
-                o.progress ? `Progress:${o.progress}` : "",
-                `Status:${o.status}`,
-            ].filter(Boolean);
-            lines.push("- " + bits.join(" | "));
+    if (trackObjectives) {
+        const active = objectives.filter(o => o.status === "active");
+        const done = objectives.filter(o => o.status !== "active").slice(-5); // recent history only
+        if (active.length === 0 && done.length === 0) {
+            lines.push("Objectives: none yet.");
+        } else {
+            lines.push("Long-term objectives (reference Titles EXACTLY as written):");
+            for (const o of [...active, ...done]) {
+                const bits = [
+                    `Owner:${o.owner}`,
+                    `Title:${o.title}`,
+                    o.description ? `Description:${o.description}` : "",
+                    o.deadline ? `Deadline:${o.deadline}` : "",
+                    o.steps ? `Steps:${o.steps}` : "",
+                    o.progress ? `Progress:${o.progress}` : "",
+                    `Status:${o.status}`,
+                ].filter(Boolean);
+                lines.push("- " + bits.join(" | "));
+            }
         }
     }
 
@@ -280,25 +293,33 @@ function applyUpdate(update, elapsedMs) {
         event.newTime = ticked?.time ?? null;
     }
 
-    // 2. Activities.
-    for (const act of update.activities) {
-        if (!act.doing) continue;
-        const p = getOrCreateParticipant(act.ownerId, act.displayName);
-        if (p) {
-            p.activity = act.doing;
-            event.activities.push(`${p.name}: ${act.doing}`);
+    // 2. Activities + 3. Schedules: only when character tracking is enabled.
+    const trackCharacters = (extension_settings[extensionName] || {}).trackCharacters !== false;
+    const trackObjectives = (extension_settings[extensionName] || {}).trackObjectives !== false;
+
+    if (trackCharacters) {
+        for (const act of update.activities) {
+            if (!act.doing) continue;
+            const p = getOrCreateParticipant(act.ownerId, act.displayName);
+            if (p) {
+                p.activity = act.doing;
+                event.activities.push(`${p.name}: ${act.doing}`);
+            }
         }
+
+        for (const sched of update.schedules) {
+            getOrCreateParticipant(sched.ownerId, sched.displayName);
+            replaceSchedule(sched.ownerId, sched.date, sched.entries);
+            event.schedules++;
+        }
+        pruneSchedules(2);
     }
 
-    // 3. Schedules.
-    for (const sched of update.schedules) {
-        getOrCreateParticipant(sched.ownerId, sched.displayName);
-        replaceSchedule(sched.ownerId, sched.date, sched.entries);
-        event.schedules++;
+    // 4. Objectives: only when objective tracking is enabled.
+    if (!trackObjectives) {
+        saveState();
+        return event;
     }
-    pruneSchedules(2);
-
-    // 4. Objectives.
     for (const obj of update.newObjectives) {
         const created = addObjective(obj);
         if (created && !event.newObjectives.some(t => t === created.title)) {
@@ -416,6 +437,10 @@ export async function runTracker(messageId = null, options = {}) {
         const mode = root.anchored ? "normal" : "setup";
         const elapsedMs = mode === "normal" ? computeElapsedMs() : null;
 
+        // Presence pass: archive participants no longer mentioned in the
+        // recent context so the tracker state only lists who is present.
+        updateActiveParticipants();
+
         if (typeof st.ConnectionManagerRequestService?.sendRequest !== "function") {
             throw new Error("ConnectionManagerRequestService is unavailable. Is the Connection Manager extension enabled?");
         }
@@ -426,7 +451,10 @@ export async function runTracker(messageId = null, options = {}) {
         pipelineBar.updatePass(0, "Tracking chronogram");
 
         const messages = [
-            { role: "system", content: substituteParams(getChronoPrompt(mode)) },
+            { role: "system", content: substituteParams(getChronoPrompt(mode, {
+                trackCharacters: settings.trackCharacters !== false,
+                trackObjectives: settings.trackObjectives !== false,
+            })) },
             { role: "user", content: buildCurrentStateBlock() },
             { role: "user", content: substituteParams(buildContextBlock(formatElapsed(elapsedMs ?? 0), mode)) },
         ];
@@ -441,13 +469,14 @@ export async function runTracker(messageId = null, options = {}) {
         pipelineBar.updatePass(0, "Applying update");
 
         const update = parseChronoResponse(cleaned);
+        const trackCharacters = settings.trackCharacters !== false;
+        const trackObjectives = settings.trackObjectives !== false;
         const hasAnything = update.clock !== null
-            || update.activities.length > 0
-            || update.schedules.length > 0
-            || update.newObjectives.length > 0
-            || update.updateObjectives.length > 0
-            || update.completeTitles.length > 0
-            || update.abandonTitles.length > 0;
+            || (trackCharacters && (update.activities.length > 0 || update.schedules.length > 0))
+            || (trackObjectives && (update.newObjectives.length > 0
+                || update.updateObjectives.length > 0
+                || update.completeTitles.length > 0
+                || update.abandonTitles.length > 0));
 
         if (!hasAnything) {
             logDebug("No Chronogram blocks found in tracker response.");

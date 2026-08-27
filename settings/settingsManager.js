@@ -6,6 +6,8 @@ export const extensionName = "Chronogram";
 export const defaultSettings = {
     enabled: true, // Master switch for the whole extension
     autorun: true, // Run the tracker automatically after AI messages
+    trackCharacters: true, // Track per-character activities + daily chronograms
+    trackObjectives: true, // Track long-term objectives
     autoRunInterval: 1, // Run every X turns (a turn = one user+AI exchange)
     delayTrigger: 0, // Seconds to wait before sending the tracker request
     contextDepth: 10, // How many past messages are sent to the tracker FOR CONTEXT ONLY
@@ -69,7 +71,7 @@ function debounce(fn) {
 }
 
 export function initSettingsListeners() {
-    $("#chrono_enabled, #chrono_autorun, #chrono_legacy_api, #chrono_debug_mode").on("change", saveSettings);
+    $("#chrono_enabled, #chrono_autorun, #chrono_track_characters, #chrono_track_objectives, #chrono_legacy_api, #chrono_debug_mode").on("change", saveSettings);
     $("#chrono_inject_format, #chrono_notification_level").on("change", saveSettings);
     $("#chrono_profile").on("change", saveSettings);
 
@@ -84,6 +86,8 @@ export function saveSettings() {
 
     s.enabled = $("#chrono_enabled").prop("checked");
     s.autorun = $("#chrono_autorun").prop("checked");
+    s.trackCharacters = $("#chrono_track_characters").prop("checked");
+    s.trackObjectives = $("#chrono_track_objectives").prop("checked");
     s.legacy_api = $("#chrono_legacy_api").prop("checked");
     s.debug_mode = $("#chrono_debug_mode").prop("checked");
     s.autoRunInterval = Math.max(1, parseInt($("#chrono_auto_run_interval").val(), 10) || 1);
@@ -107,6 +111,8 @@ export function applySettingsToUI() {
 
     $("#chrono_enabled").prop("checked", s.enabled === true);
     $("#chrono_autorun").prop("checked", s.autorun === true);
+    $("#chrono_track_characters").prop("checked", s.trackCharacters !== false);
+    $("#chrono_track_objectives").prop("checked", s.trackObjectives !== false);
     $("#chrono_legacy_api").prop("checked", s.legacy_api === true);
     $("#chrono_debug_mode").prop("checked", s.debug_mode === true);
     $("#chrono_auto_run_interval").val(s.autoRunInterval ?? 1);

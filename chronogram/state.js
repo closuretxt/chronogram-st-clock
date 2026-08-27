@@ -139,6 +139,10 @@ export function getStateRoot() {
     if (!root.participants || typeof root.participants !== "object") root.participants = {};
     if (!root.schedules || typeof root.schedules !== "object") root.schedules = {};
     if (!Array.isArray(root.objectives)) root.objectives = [];
+    // Migration: participants gained an `active` presence flag later on.
+    for (const p of Object.values(root.participants)) {
+        if (typeof p.active !== "boolean") p.active = true;
+    }
     return root;
 }
 
@@ -167,13 +171,74 @@ export function getParticipants() {
     return getStateRoot()?.participants || {};
 }
 
+// Active participants only: used by the drawer, the injection and the tracker
+// state. Inactive (off-context) participants keep ALL their stored data
+// (activity, schedules, objectives) but are hidden everywhere until they are
+// mentioned in the chat again.
+export function getActiveParticipants() {
+    return Object.fromEntries(
+        Object.entries(getParticipants()).filter(([, p]) => p?.active !== false)
+    );
+}
+
+// Lowercased needles that count as "this character is mentioned in the text".
+function participantNeedles(id, p) {
+    const needles = new Set();
+    const add = (v) => {
+        const s = String(v ?? "").trim().toLowerCase();
+        if (s.length >= 3 && s !== "user") needles.add(s);
+    };
+    add(p?.name);
+    if (id !== "user") add(id.replaceAll("_", " "));
+    // Multi-word names are usually referenced by the first name alone.
+    const first = String(p?.name ?? "").trim().split(/\s+/)[0];
+    if (first.length >= 4) add(first);
+    return [...needles];
+}
+
+// True when the character's name/id appears in the given text.
+export function isMentionedIn(text, id, p) {
+    const hay = String(text ?? "").toLowerCase();
+    if (!hay) return false;
+    return participantNeedles(id, p).some(n => hay.includes(n));
+}
+
+// How many recent visible messages count as "the current context" for presence.
+const ACTIVE_LOOKBACK = 20;
+
+// Recomputes every participant's active flag from the recent chat: mentioned
+// in the last ACTIVE_LOOKBACK visible messages -> active, otherwise inactive
+// (archived, but their schedule/data stays fetchable). The user is always
+// active.
+export function updateActiveParticipants() {
+    const st = getContext();
+    const root = getStateRoot();
+    if (!st?.chat || !root) return;
+    const recent = st.chat
+        .filter(m => m
+            && m.is_system !== true && m.is_system !== "true"
+            && m.is_hidden !== true && m.is_hidden !== "true"
+            && String(m.mes ?? "").trim())
+        .slice(-ACTIVE_LOOKBACK)
+        .map(m => String(m.mes).toLowerCase())
+        .join("\n");
+    for (const [id, p] of Object.entries(root.participants)) {
+        if (id === "user") {
+            p.active = true;
+            continue;
+        }
+        p.active = isMentionedIn(recent, id, p);
+    }
+    saveState();
+}
+
 export function getOrCreateParticipant(ownerId, displayName = null) {
     const root = getStateRoot();
     if (!root) return null;
     const id = resolveOwnerId(ownerId);
     let p = root.participants[id];
     if (!p) {
-        p = { name: displayName || (id === "user" ? "User" : id), activity: "" };
+        p = { name: displayName || (id === "user" ? "User" : id), activity: "", active: true };
         root.participants[id] = p;
     } else if (displayName && p.name !== displayName && p.name === id) {
         p.name = displayName; // upgrade placeholder names
@@ -225,6 +290,14 @@ export function getSchedules() {
     return getStateRoot()?.schedules || {};
 }
 
+// The tracker sometimes annotates entries with "(Current)". The current slot
+// is derived from the world clock, so such markers are stripped everywhere.
+export function stripCurrentMarker(text) {
+    return String(text ?? "")
+        .replace(/\s*\(\s*current\s*\)\s*$/i, "")
+        .trim();
+}
+
 // entries: [{time, activity}] sorted by parsed time-of-day.
 export function replaceSchedule(ownerId, dateStr, entries) {
     const root = getStateRoot();
@@ -232,7 +305,7 @@ export function replaceSchedule(ownerId, dateStr, entries) {
     const id = resolveOwnerId(ownerId);
     if (!isValidDateString(dateStr)) return;
     const clean = (Array.isArray(entries) ? entries : [])
-        .map(e => ({ time: String(e.time || "").trim(), activity: String(e.activity || "").trim() }))
+        .map(e => ({ time: String(e.time || "").trim(), activity: stripCurrentMarker(e.activity) }))
         .filter(e => e.time && e.activity)
         .sort((a, b) => (parseTimeHM(a.time) ?? 0) - (parseTimeHM(b.time) ?? 0));
     root.schedules[id] = root.schedules[id] || {};
