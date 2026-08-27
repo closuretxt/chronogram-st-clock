@@ -1,6 +1,6 @@
 // Injection: registers the {{chronogram}} macro which renders the world
-// clock, participants' current activities, today's schedules and long-term
-// objectives as a single <chronogram> block for the story LLM.
+// clock, participants' daily schedules and long-term objectives as a single
+// <chronogram> block for the story LLM.
 // Also renders the Chronogram viewer panel (drawer + popup window share it).
 
 import { macros as macroSystem } from "../../../../macros/macro-system.js";
@@ -35,6 +35,14 @@ function escapeHtml(text) {
         .replaceAll('"', "&quot;");
 }
 
+// Turns a character's display name into a valid XML-ish tag body:
+// "Curren Chan" -> "Curren_Chan", so the injection can emit
+// <Curren_Chan_chronogram>...</Curren_Chan_chronogram>.
+function sanitizeTagName(name) {
+    const clean = String(name ?? "").trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9_]/g, "");
+    return clean || "character";
+}
+
 // The injected wording lives in its own file (mirrors settings/defaultPrompt.js
 // for the tracker prompt) so the format can be tuned without touching logic.
 export { DEFAULT_INJECTION_INTRO };
@@ -56,24 +64,51 @@ export function buildInjectionText() {
     const objectives = trackObjectives ? getObjectives() : [];
 
     const lines = [];
+    // Minimalism: nothing tracked yet -> emit NOTHING at all (no placeholder
+    // Date/Time noise, no wrapper, no intro). The macro simply vanishes.
     if (clock) {
         lines.push(`<Date>${clock.date}</Date>`);
         lines.push(`<Time>${clock.time}</Time>`);
-    } else {
-        lines.push("<Date>(not yet established)</Date>");
-        lines.push("<Time>(not yet established)</Time>");
     }
 
-    for (const [id, p] of Object.entries(participants)) {
-        lines.push(`<person name="${escapeHtml(p.name || id)}">`);
-        if (p.activity) lines.push(`Doing:${p.activity}`);
-        if (clock?.date) {
-            const sched = getScheduleFor(id, clock.date);
-            if (sched.length > 0) {
-                lines.push(`Plan for today: ${sched.map(e => `${e.time} ${stripCurrentMarker(e.activity)}`).join("; ")}.`);
+    // {{user}}'s card always comes first, then everyone else.
+    const orderedParticipants = Object.entries(participants)
+        .sort(([a], [b]) => (a === "user" ? -1 : b === "user" ? 1 : 0));
+
+    const nowMin = clock ? parseTimeHM(clock.time) : null;
+
+    for (const [id, p] of orderedParticipants) {
+        const sched = clock?.date ? getScheduleFor(id, clock.date) : [];
+        if (sched.length === 0) continue;
+
+        // Time-aware split: whatever already ended is gone (a 09:00 slot has
+        // no business in the prompt at 10:00). The slot still in progress
+        // stays as "Now", the first future one is the "Next" priority, and
+        // everything after that is the remaining outline of the day.
+        let now = null;
+        const upcoming = [];
+        for (const e of sched) {
+            const t = parseTimeHM(e.time);
+            if (nowMin !== null && t !== null && t <= nowMin) {
+                now = e; // later matching slots simply overwrite earlier ones
+            } else {
+                upcoming.push(e);
             }
         }
-        lines.push("</person>");
+
+        const parts = [];
+        if (now) parts.push(`Now:${stripCurrentMarker(now.activity)}`);
+        if (upcoming.length > 0) parts.push(`Next:${upcoming[0].time} ${stripCurrentMarker(upcoming[0].activity)}`);
+        const rest = upcoming.slice(1);
+        if (rest.length > 0) {
+            parts.push(`Plan for today: ${rest.map(e => `${e.time} ${stripCurrentMarker(e.activity)}`).join("; ")}.`);
+        }
+        if (parts.length === 0) continue;
+
+        const tag = `${sanitizeTagName(p.name || id)}_chronogram`;
+        lines.push(`<${tag}>`);
+        lines.push(...parts);
+        lines.push(`</${tag}>`);
     }
 
     const active = objectives.filter(o => o.status === "active");
@@ -92,6 +127,9 @@ export function buildInjectionText() {
 
     const body = lines.join("\n");
 
+    // Nothing tracked at all (no clock, no present characters with data, no
+    // active objectives): emit nothing rather than an empty wrapper + intro.
+    if (!body) return "";
     if (format === "raw") return body;
     return `<chronogram>\n${DEFAULT_INJECTION_INTRO}\n${body}\n</chronogram>`;
 }
@@ -104,7 +142,7 @@ function registerMacro() {
     try {
         macroSystem.registry.registerMacro(MACRO_KEY, {
             category: macroSystem.category?.MISC ?? "misc",
-            description: "Persistent world clock, per-character activities/daily chronograms and long-term objectives tracked by Chronogram.",
+            description: "Persistent world clock, per-character daily chronograms and long-term objectives tracked by Chronogram.",
             handler: () => buildInjectionText(),
         });
     } catch (e) {
@@ -113,7 +151,7 @@ function registerMacro() {
             macroSystem.registry.unregisterMacro(MACRO_KEY);
             macroSystem.registry.registerMacro(MACRO_KEY, {
                 category: macroSystem.category?.MISC ?? "misc",
-                description: "Persistent world clock, activities, schedules and objectives tracked by Chronogram.",
+                description: "Persistent world clock, schedules and objectives tracked by Chronogram.",
                 handler: () => buildInjectionText(),
             });
         } catch (e2) {
@@ -194,7 +232,6 @@ function renderParticipantCard(id, p) {
                 <span class="chrono-name">${escapeHtml(p.name || id)}</span>
                 ${id === "user" ? '<span class="chrono-badge">You</span>' : ""}
             </div>
-            ${p.activity ? `<div class="chrono-doing"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(p.activity)}</div>` : ""}
             ${schedLines
                 ? `<div class="chrono-schedule">${schedLines}</div>`
                 : '<div class="chrono-empty-small">No chronogram for today yet.</div>'}

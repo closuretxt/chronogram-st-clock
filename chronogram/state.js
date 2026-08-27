@@ -96,7 +96,7 @@ export function formatElapsed(ms) {
 // Any owner reported by the LLM that means the user ("User", "{{user}}",
 // "You", or literally the current persona's name) resolves to the reserved
 // id "user". Without the persona-name match the tracker would file the
-// user's own schedule/activity/objectives under a separate look-alike
+// user's own schedule/objectives under a separate look-alike
 // participant whenever the model wrote Owner:<persona name>.
 export function resolveOwnerId(name) {
     const n = String(name || "").trim();
@@ -141,7 +141,7 @@ function defaultRoot() {
     return {
         anchored: false, // false until the setup run establishes the clock
         clock: null, // { date: "MM/DD/YYYY", time: "HH:MM" } - shared world clock
-        participants: {}, // id -> { name, activity }
+        participants: {}, // id -> { name, active }
         schedules: {}, // ownerId -> { [dateStr]: [{ time, activity }] }
         objectives: [], // long-term objectives across days
         lastRunAt: null, // epoch ms of the previously tracked moment
@@ -171,7 +171,7 @@ export function getStateRoot() {
 // Older tracker runs could file the user's data under their persona name
 // (e.g. id "Curren_Chan") instead of the reserved "user" id, leaving the
 // user without a card. Merge any such look-alike participant into "user":
-// activity, schedules and objectives all move across, the duplicate is
+// schedules and objectives all move across, the duplicate is
 // deleted. Runs at most once per session.
 let _userAliasMigrated = false;
 function migrateUserAlias(root) {
@@ -189,13 +189,11 @@ function migrateUserAlias(root) {
     if (aliasIds.length === 0) return;
 
     const user = root.participants.user = root.participants.user
-        || { name: persona, activity: "", active: true };
+        || { name: persona, active: true };
     user.name = persona; // the user card always shows the persona's name
     user.active = true;
 
     for (const aliasId of aliasIds) {
-        const alias = root.participants[aliasId];
-        if (alias && !user.activity) user.activity = alias.activity || "";
         const aliasSched = root.schedules[aliasId] || {};
         root.schedules.user = root.schedules.user || {};
         for (const [date, entries] of Object.entries(aliasSched)) {
@@ -245,7 +243,7 @@ export function getParticipants() {
 
 // Active participants only: used by the drawer, the injection and the tracker
 // state. Inactive (off-context) participants keep ALL their stored data
-// (activity, schedules, objectives) but are hidden everywhere until they are
+// (schedules, objectives) but are hidden everywhere until they are
 // mentioned in the chat again.
 export function getActiveParticipants() {
     return Object.fromEntries(
@@ -314,7 +312,7 @@ export function getOrCreateParticipant(ownerId, displayName = null) {
     const id = resolveOwnerId(ownerId);
     let p = root.participants[id];
     if (!p) {
-        p = { name: displayName || (id === "user" ? "User" : id), activity: "", active: true };
+        p = { name: displayName || (id === "user" ? "User" : id), active: true };
         root.participants[id] = p;
     } else if (displayName && p.name !== displayName && p.name === id) {
         p.name = displayName; // upgrade placeholder names

@@ -1,6 +1,6 @@
 // Chronogram tracker: builds the prompt, runs it through a SillyTavern
 // Connection profile via ConnectionManagerRequestService, parses the result
-// and applies the new world-clock / activities / schedules / objectives.
+// and applies the new world clock, daily schedules and objectives.
 // Mirrors Persist's tracker pipeline 1:1 where possible.
 
 import { substituteParams } from "../../../../../script.js";
@@ -122,10 +122,9 @@ function buildCurrentStateBlock() {
         if (entries.length === 0) {
             lines.push("Participants: none tracked yet.");
         } else {
-            lines.push("Participants (PRESENT characters only - current activity + today's plan):");
+            lines.push("Participants (PRESENT characters only - today's plan):");
             for (const [id, p] of entries) {
                 lines.push(`<participant name="${id}">`);
-                lines.push(`Doing:${p.activity || "(unknown)"}`);
                 if (clock?.date) {
                     const sched = getScheduleFor(id, clock.date);
                     if (sched.length > 0) {
@@ -274,7 +273,6 @@ function applyUpdate(update, elapsedMs) {
         oldDate: beforeClock?.date || null,
         newDate: null,
         newTime: null,
-        activities: [],
         schedules: 0,
         newObjectives: [],
         updatedObjectives: [],
@@ -293,20 +291,11 @@ function applyUpdate(update, elapsedMs) {
         event.newTime = ticked?.time ?? null;
     }
 
-    // 2. Activities + 3. Schedules: only when character tracking is enabled.
+    // 2. Schedules: only when character tracking is enabled.
     const trackCharacters = (extension_settings[extensionName] || {}).trackCharacters !== false;
     const trackObjectives = (extension_settings[extensionName] || {}).trackObjectives !== false;
 
     if (trackCharacters) {
-        for (const act of update.activities) {
-            if (!act.doing) continue;
-            const p = getOrCreateParticipant(act.ownerId, act.displayName);
-            if (p) {
-                p.activity = act.doing;
-                event.activities.push(`${p.name}: ${act.doing}`);
-            }
-        }
-
         for (const sched of update.schedules) {
             getOrCreateParticipant(sched.ownerId, sched.displayName);
             replaceSchedule(sched.ownerId, sched.date, sched.entries);
@@ -365,7 +354,7 @@ function notifyEvent(event) {
     }
 
     // "all": full detail toast.
-    if (!dayChanged && event.activities.length === 0 && event.newObjectives.length === 0
+    if (!dayChanged && event.newObjectives.length === 0
         && event.updatedObjectives.length === 0 && event.completedObjectives.length === 0
         && event.abandonedObjectives.length === 0 && event.schedules === 0) {
         return; // clock-only churn
@@ -373,7 +362,6 @@ function notifyEvent(event) {
     const lines = [];
     if (event.newDate) lines.push(`Clock: ${event.newDate} ${event.newTime ?? ""}`);
     if (dayChanged) lines.push(`NEW DAY: ${event.newDate}`);
-    for (const a of event.activities) lines.push(`Activity - ${a}`);
     if (event.schedules > 0) lines.push(`Schedules built: ${event.schedules}`);
     for (const t of event.newObjectives) lines.push(`New objective: ${t}`);
     for (const t of event.updatedObjectives) lines.push(`Updated objective: ${t}`);
@@ -472,7 +460,7 @@ export async function runTracker(messageId = null, options = {}) {
         const trackCharacters = settings.trackCharacters !== false;
         const trackObjectives = settings.trackObjectives !== false;
         const hasAnything = update.clock !== null
-            || (trackCharacters && (update.activities.length > 0 || update.schedules.length > 0))
+            || (trackCharacters && update.schedules.length > 0)
             || (trackObjectives && (update.newObjectives.length > 0
                 || update.updateObjectives.length > 0
                 || update.completeTitles.length > 0

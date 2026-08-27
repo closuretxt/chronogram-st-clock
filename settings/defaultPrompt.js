@@ -2,85 +2,70 @@
 // Sent as the system message to the tracker LLM.
 // Two modes: "setup" (first run of a chat) and "normal" (every later run).
 
-const OUTPUT_HEADER = `## Output format
-Emit machine-readable blocks ONLY. Never write commentary outside blocks.`;
+// The CHRONOGRAM (clock + daily schedules) is the detailed half: every entry
+// should be concrete and specific.
+// The OBJECTIVES are the opposite: strictly quality over quantity, few and
+// substantial or none at all.
 
-const OUTPUT_CLOCK = `The world clock (shared by everyone):
-<clock_update>
+const OUTPUT_HEADER = `Emit ONLY the blocks described below. No commentary.`;
+
+const OUTPUT_CLOCK = `<clock_update>
 Date:MM/DD/YYYY
 Time:HH:MM
 </clock_update>
-- Emit EXACTLY ONE clock_update with the NEW absolute current date and time in 24h HH:MM format.
-- Date and time are ABSOLUTE values (not deltas). Advance the clock according to Time Passed and the events of the scene.
-- It is fine to jump minutes/hours when the fiction clearly does (conversation took hours, they slept overnight, next morning...).
-- If nobody slept and the scene continues seamlessly, small advances (10m, 20m) are expected.`;
+Exactly ONE per run. New ABSOLUTE values (24h time), not deltas. Advance by what actually happened in the scene: minutes if seamless, hours or days if the story moved.`;
 
-const OUTPUT_ACTIVITY = `What each PRESENT participant is doing RIGHT NOW (one block per person who matters in the scene, including {{user}}):
-<activity>
-Owner:Aldric
-Doing:Arguing with the blacksmith about his order
-</activity>
-- Only report people who actually appear or act in the latest exchange. {{user}} is called "User".
-- Characters listed in <chronogram_state> who are NOT in the latest exchange are off-screen: skip them entirely. They are archived automatically and rejoin tracking when they show up again.
-- New characters who matter in the scene are added automatically: just emit an <activity> block for them.
-- "Doing" should convey their obligations/responsibilities in-fiction with as much concrete detail as possible: what keeps them busy, where they are expected, with whom and why.`;
-
-const OUTPUT_SCHEDULE = `Daily schedule: ONLY when the clock crosses midnight into a NEW calendar date, emit ONE <new_schedule> block per participant listed in <chronogram_state>, sketching their upcoming day step by step:
+const OUTPUT_SCHEDULE = `One <new_schedule> per character PRESENT in the latest exchange (plus {{user}} as "User"), ONLY when the clock crosses into a NEW calendar date. Characters absent from the exchange are off-screen: skip them entirely (they rejoin automatically when they return).
 <new_schedule>
 Owner:Aldric
 Date:MM/DD/YYYY
-08:00 wakes up and oversees breakfast
-10:00 holds court in the great hall
-13:00 lunch with the envoys
-18:00 free time (available to meet User)
+07:00 wakes up, drills with the guard in the courtyard
+09:00 court petitions in the great hall
+12:00 private lunch with his steward
+14:00 inspects the eastern walls with the captain
+17:00 meets merchants in the counting room
+19:00 supper with the household
+21:00 free time - reachable by {{user}}
 23:00 retires to his chambers
 </new_schedule>
-- DETAILED is the standard: cover the whole day from waking to sleep with 6-10 concrete entries (what, where, with whom, why). Weave in the character's role, habits and long-term objectives. {{user}} gets a schedule too, even if loose.
-- Do NOT tag any entry as "current" (no "(Current)" markers): the current slot is derived from the world clock automatically. Plans are plans.`;
+6-10 entries spanning waking to sleep. EVERY entry concrete: task, place, company, purpose - rooted in the character's role, habits and objectives. Never generic filler like "spends the day busy". {{user}} gets one too, even a loose one. Never tag an entry as current.`;
 
-const OUTPUT_OBJECTIVES = `Long-term objectives - SUBSTANTIAL ones only (they survive across days and scenes, for BOTH User and characters):
+const OUTPUT_OBJECTIVES = `SUBSTANTIAL long-term goals only: story-shaping, with real stakes, spanning multiple scenes or days (quests, debts, rivalries, secrets, careers). Creating NONE is preferred over creating filler. No errands, nothing resolvable within the current scene, no vague flavor goals.
 <new_objective>
 Owner:Aldric
 Title:Recover the family sword
-Description:A description of what must be done and why it matters.
-Deadline:MM/DD/YYYY(optional, omit if none)
-Steps:Talk to the merchant -> Travel to the ruins -> Reclaim it (optional, arrow-separated)
+Description:What must be done and why it matters.
+Deadline:MM/DD/YYYY(omit if none)
+Steps:First milestone -> Second -> Final (optional)
 </new_objective>
 <update_objective>
-Title:Recover the family sword
-Progress:Short note of what changed towards completion.
-Deadline:MM/DD/YYYY(only if the deadline itself changed)
+Title:(exact title from <chronogram_state>)
+Progress:What concretely changed toward completion.
+Deadline:(only if changed)
 </update_objective>
 <complete_objective>
-Title:Recover the family sword
+Title:(exact title from <chronogram_state>)
 </complete_objective>
 <abandon_objective>
-Title:Recover the family sword
+Title:(exact title from <chronogram_state>)
 </abandon_objective>
-- Objective Titles must be copied EXACTLY as shown in <chronogram_state>. An edit targeting a mismatched title is discarded.
-- Do not recreate objectives that already exist. Update them instead.
-- SUBSTANTIAL means: story-shaping goals with real stakes and consequences that will take multiple scenes or days (debts, quests, relationships, rivalries, careers, secrets, revenge...).
-- NEVER create filler: no errands, no tasks resolvable within the current scene, no generic "get closer to someone" flavor goals. Quality over quantity: creating NO new objective in a run is preferred over inventing a weak one.`;
+Titles must match <chronogram_state> EXACTLY or the edit is discarded. Update existing objectives instead of recreating them.`;
 
 // Full format with every module enabled (kept exported for reference/compat).
-export const OUTPUT_FORMAT = [OUTPUT_HEADER, OUTPUT_CLOCK, OUTPUT_ACTIVITY, OUTPUT_SCHEDULE, OUTPUT_OBJECTIVES].join("\n\n");
+export const OUTPUT_FORMAT = [OUTPUT_HEADER, OUTPUT_CLOCK, OUTPUT_SCHEDULE, OUTPUT_OBJECTIVES].join("\n\n");
 
-const CHARACTERS_DISABLED_NOTE = `Character & schedule tracking is DISABLED: do NOT emit <activity> or <new_schedule> blocks. Clock updates only. This overrides any other instruction.`;
+const CHARACTERS_DISABLED_NOTE = `Character & schedule tracking is DISABLED: never emit <new_schedule>. Clock updates only.`;
 
-const OBJECTIVES_DISABLED_NOTE = `Objective tracking is DISABLED: do NOT emit any objective blocks (<new_objective>, <update_objective>, <complete_objective>, <abandon_objective>). This overrides any other instruction.`;
+const OBJECTIVES_DISABLED_NOTE = `Objective tracking is DISABLED: never emit <new_objective>, <update_objective>, <complete_objective> or <abandon_objective>.`;
 
-const SETUP_RULES = `## Mode: SETUP (first run of this chat)
-There is no established clock yet. Your job:
-1. Decide the current in-fiction date (MM/DD/YYYY) and time (HH:MM) based on the story so far. If nothing indicates otherwise, assume it is mid-day around 12:00. Emit ONE <clock_update>.
-2. Establish ONLY the characters present in the opening scene (plus "User"), each with ONE <activity> block describing what they are doing right now and what responsibilities loom over them. Be as specific as possible.
-3. Emit ONE <new_schedule> per participant for TODAY's date: a detailed, lived-in day (wake, duties, meals, free slots, sleep - 6-10 concrete entries). This is the base chronogram.
-4. Create substantial long-term objectives grounded in the established fiction for User and characters. Quality over quantity: only goals that will actually shape the story; none if nothing fits.`;
+const SETUP_RULES = `## SETUP (first run of this chat)
+Infer the current in-fiction date/time from the story so far (default mid-day 12:00) and emit its clock_update. Establish every character present in the opening scene plus "User" with a full schedule for today each. Add any objective genuinely grounded in the fiction - or none.`;
 
-const NORMAL_RULES = `## Mode: TRACKING
-You receive the current <chronogram_state> and the latest exchange, along with "Time Passed" measured from the previously tracked moment. Update the clock absolutely, adjust activities, honor the daily-schedule-on-new-day rule, and maintain objectives. Only track characters who appear in the latest exchange: anyone absent from it is off-screen - leave them untouched, they are archived automatically until they show up again. You are not required to change anything but the clock every run: a quiet continuation only needs clock_update (and maybe updated activities).`;
+const NORMAL_RULES = `## TRACKING
+Using Time Passed and what happened, advance the clock, generate schedules at midnight crossings, and maintain objectives. A quiet continuation needs only clock_update. Leave off-screen characters untouched.`;
 
 export function getChronoPrompt(mode, { trackCharacters = true, trackObjectives = true } = {}) {
-    const header = `You are the timekeeper and objective tracker for an interactive roleplay. You do NOT write story content. You watch the latest exchange between {{user}} and the characters, keep the fictional DATE and TIME moving consistently, track what every PRESENT character is currently doing (their responsibilities), and manage substantial long-term objectives for both {{user}} ("User") and the characters. Only characters visible in the recent story are tracked; the rest are off-screen. Even simple slice-of-life stories follow this: people wake up, work, eat and sleep; {{user}} has duties and so does everyone else.`;
+    const header = `Silent bookkeeper for this roleplay. You never write story content or commentary. You maintain the world clock, the daily chronograms of PRESENT characters, and long-term objectives for {{user}} ("User") and the characters.`;
 
     const rules = mode === "setup" ? SETUP_RULES : NORMAL_RULES;
 
@@ -88,7 +73,7 @@ export function getChronoPrompt(mode, { trackCharacters = true, trackObjectives 
     // disabled module is never even requested from the tracker LLM.
     const sections = [OUTPUT_HEADER, OUTPUT_CLOCK];
     if (trackCharacters) {
-        sections.push(OUTPUT_ACTIVITY, OUTPUT_SCHEDULE);
+        sections.push(OUTPUT_SCHEDULE);
     } else {
         sections.push(CHARACTERS_DISABLED_NOTE);
     }

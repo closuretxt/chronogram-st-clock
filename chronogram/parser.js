@@ -3,7 +3,6 @@
 import { resolveOwnerId, parseDateMDY, parseTimeHM } from "./state.js";
 
 const CLOCK_RE = /<clock_update>([\s\S]*?)<\/\s*clock_update>/gi;
-const ACTIVITY_RE = /<activity>([\s\S]*?)<\/\s*activity>/gi;
 const SCHEDULE_RE = /<new_schedule>([\s\S]*?)<\/\s*new_schedule>/gi;
 const NEW_OBJ_RE = /<new_objective>([\s\S]*?)<\/\s*new_objective>/gi;
 const UPDATE_OBJ_RE = /<update_objective>([\s\S]*?)<\/\s*update_objective>/gi;
@@ -46,18 +45,17 @@ function parseScheduleEntries(body) {
 // True when at least one known block type was matched.
 export function hasChronoBlocks(text) {
     const src = String(text || "");
-    return [CLOCK_RE, ACTIVITY_RE, SCHEDULE_RE, NEW_OBJ_RE, UPDATE_OBJ_RE, COMPLETE_OBJ_RE, ABANDON_OBJ_RE]
+    return [CLOCK_RE, SCHEDULE_RE, NEW_OBJ_RE, UPDATE_OBJ_RE, COMPLETE_OBJ_RE, ABANDON_OBJ_RE]
         .some(re => (re.lastIndex = 0) === 0 && re.test(src));
 }
 
 // Returns a parsed update object:
-// { clock, activities[], schedules[], newObjectives[], updateObjectives[],
+// { clock, schedules[], newObjectives[], updateObjectives[],
 //   completeTitles[{owner,title}], abandonTitles[{owner,title}] }
 export function parseChronoResponse(responseText) {
     const text = String(responseText || "");
     const result = {
         clock: null,
-        activities: [],
         schedules: [],
         newObjectives: [],
         updateObjectives: [],
@@ -75,17 +73,6 @@ export function parseChronoResponse(responseText) {
         if (parseDateMDY(date) && parseTimeHM(time) !== null) {
             result.clock = { date, time };
         }
-    }
-
-    ACTIVITY_RE.lastIndex = 0;
-    while ((m = ACTIVITY_RE.exec(text)) !== null) {
-        const f = parseFields(m[1]);
-        if (!f.Owner) continue;
-        result.activities.push({
-            ownerId: resolveOwnerId(f.Owner),
-            displayName: f.Owner.trim(),
-            doing: String(f.Doing || f.Activity || f.Currently || "").trim(),
-        });
     }
 
     SCHEDULE_RE.lastIndex = 0;

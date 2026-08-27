@@ -195,19 +195,6 @@
     font-size: 1.05em;
 }
 
-.chrono-doing {
-    width: 100%;
-    font-size: 0.9em;
-    font-style: italic;
-    opacity: 0.85;
-    margin-top: 3px;
-}
-
-.chrono-doing i {
-    font-style: normal;
-    opacity: 0.8;
-}
-
 .chrono-schedule {
     display: flex;
     flex-direction: column;
@@ -233,7 +220,7 @@
     opacity: 0.85;
 }
 
-/* Current activity: soft blue accent (kept subtle) */
+/* Current slot: soft blue accent (kept subtle) */
 .chrono-sched-now {
     color: #9ec4ee;
     font-weight: bold;
