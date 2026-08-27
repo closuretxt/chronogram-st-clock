@@ -630,18 +630,12 @@ export function runTrackerManual() {
         return;
     }
 
-    // If the latest message was already tracked (it carries a snapshot),
-    // imitate swipe behavior: roll state back, drop the stale snapshot and
-    // reset the guard so this run isn't discarded as a dupe.
+    // Always return to the PREVIOUS message's info first: drop the tracked
+    // message's stale snapshot, restore the state from before it and reset
+    // the guard, so this run's request doesn't duplicate the updates the
+    // previous run already applied (same behavior as a swipe).
     const lastId = (st.chat?.length ?? 1) - 1;
-    const lastMsg = st.chat[lastId];
-    if (lastMsg && !lastMsg.is_user && lastMsg.extra?.chrono_snapshot) {
-        clearMessageSnapshot(lastId);
-        restoreStateUpTo(lastId - 1);
-        resetTrackerGuard();
-        logDebug(`Manual run: rolled back state before message ${lastId}.`);
-    }
-    resetTrackerGuard();
+    rollbackToBeforeMessage(lastId);
 
     runTracker(null, { manual: true }).then(result => {
         if (typeof toastr === "undefined") return;
@@ -664,6 +658,44 @@ export function runTrackerManual() {
                 break;
         }
     });
+}
+
+// ---------------------------------------------------------------------------
+// Rollback (button / swipe recovery)
+// ---------------------------------------------------------------------------
+
+// Rolls the chronogram state back to what it was BEFORE `messageId` was
+// tracked: the tracked message's stale snapshot is dropped and the nearest
+// snapshot from an earlier message is restored (i.e. "the previous message's
+// info"), so a re-run builds its request from that rolled-back state instead
+// of stacking new updates on top of the old ones (which duplicated the
+// clock/objective changes). Also resets the swipe/re-entry guard so the next
+// run isn't discarded as "already_tracked".
+export function rollbackToBeforeMessage(messageId) {
+    const st = getST();
+    const chat = st.chat || [];
+    const startId = Math.min(Number(messageId) || 0, chat.length - 1);
+
+    // Walk backwards exactly like runTracker does so we target the message
+    // that was ACTUALLY tracked (skipping user/ghost messages), not just the
+    // raw event id - otherwise the stale snapshot of the real tracked message
+    // survives and the next request duplicates its updates.
+    let trackedId = -1;
+    for (let i = startId; i > 0; i--) {
+        const msg = chat[i];
+        if (!msg || msg.is_user) continue;
+        if (isGhostMessage(msg)) continue;
+        trackedId = i;
+        break;
+    }
+    if (trackedId < 0) return false;
+
+    const hadSnapshot = Boolean(chat[trackedId]?.extra?.chrono_snapshot);
+    clearMessageSnapshot(trackedId);
+    const restored = restoreStateUpTo(trackedId - 1);
+    resetTrackerGuard();
+    logDebug(`Rolled back chronogram state before message ${trackedId} (stale snapshot removed: ${hadSnapshot}, previous state restored: ${restored}).`);
+    return true;
 }
 
 // ---------------------------------------------------------------------------

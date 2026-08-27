@@ -9,7 +9,7 @@ import { loadSettings, saveSettings, defaultSettings, initSettingsListeners, app
 export { loadSettings, saveSettings, defaultSettings };
 
 // Tracker
-import { runTracker, runTrackerManual, resetTrackerGuard, cancelTracker, clearMessageSnapshot, restoreStateUpTo } from "./chronogram/tracker.js";
+import { runTracker, runTrackerManual, resetTrackerGuard, cancelTracker, rollbackToBeforeMessage, restoreStateUpTo } from "./chronogram/tracker.js";
 import { registerInjectionMacro, initPanelHandlers, refreshChronoPanel, resetChatData } from "./chronogram/injection.js";
 // UI
 import { initPopupWindow, toggleChronoWindow } from "./ui/popupWindow.js";
@@ -89,13 +89,13 @@ jQuery(async () => {
             refreshChronoPanel();
         });
 
-        // Swipe: roll state back to before this message, drop its stale
-        // snapshot, and let the tracker re-run on the new swipe generation.
+        // Swipe: return to the PREVIOUS message's info - drop the tracked
+        // message's stale snapshot, restore the state from before it and
+        // reset the guard - so the tracker re-run on the new swipe generation
+        // doesn't duplicate the updates the previous run already applied.
         st.eventSource.on(st.event_types.MESSAGE_SWIPED, async (messageId) => {
             const id = messageId ?? (st.chat?.length ?? 1) - 1;
-            clearMessageSnapshot(id);
-            restoreStateUpTo(id - 1);
-            resetTrackerGuard();
+            rollbackToBeforeMessage(id);
             refreshChronoPanel();
         });
 
