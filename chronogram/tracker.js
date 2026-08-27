@@ -5,6 +5,7 @@
 
 import { substituteParams } from "../../../../../script.js";
 import { extension_settings } from "../../../../extensions.js";
+import { getWorldInfoPrompt } from "../../../../world-info.js";
 import {
     logDebug,
     getST,
@@ -28,6 +29,7 @@ import {
     replaceSchedule,
     pruneSchedules,
     getScheduleFor,
+    getSchedules,
     addObjective,
     updateObjective,
     setObjectiveStatus,
@@ -125,6 +127,15 @@ function buildCurrentStateBlock() {
             lines.push("Participants (PRESENT characters only - today's plan):");
             for (const [id, p] of entries) {
                 lines.push(`<participant name="${id}">`);
+                // Previous tracker info: plans kept from earlier dates are sent
+                // too, so a midnight crossing doesn't start from a blank page.
+                const allScheds = getSchedules()[id] || {};
+                for (const d of Object.keys(allScheds).filter(d => d !== clock?.date).sort()) {
+                    const prev = allScheds[d] || [];
+                    if (prev.length > 0) {
+                        lines.push(`Previous plan (${d}): ${prev.map(e => `${e.time} ${stripCurrentMarker(e.activity)}`).join("; ")}`);
+                    }
+                }
                 if (clock?.date) {
                     const sched = getScheduleFor(id, clock.date);
                     if (sched.length > 0) {
@@ -165,7 +176,10 @@ function buildCurrentStateBlock() {
 }
 
 // History context + the exchanges to analyze, with the elapsed-time header.
-function buildContextBlock(elapsedText, mode) {
+
+// Shared message-set extraction so both context modes (flat block / roles)
+// see exactly the same history and target messages.
+function getContextMessages() {
     const st = getST();
     const settings = extension_settings[extensionName] || {};
     const depth = Math.max(0, settings.contextDepth ?? 10);
@@ -173,25 +187,107 @@ function buildContextBlock(elapsedText, mode) {
 
     const visibleChat = st.chat.filter(m => !isGhostMessage(m));
     const targetCount = Math.min(visibleChat.length, interval * 2);
-    const target = visibleChat.slice(-targetCount);
-    const history = visibleChat.slice(0, visibleChat.length - targetCount).slice(-depth);
+    return {
+        history: visibleChat.slice(0, visibleChat.length - targetCount).slice(-depth),
+        target: visibleChat.slice(-targetCount),
+    };
+}
+
+function messageLine(m) {
+    return `${m.name || (m.is_user ? "User" : "Assistant")}: ${m.mes}`;
+}
+
+function messageRole(m) {
+    if (m.is_system === true || m.is_system === "true") return "system";
+    return m.is_user ? "user" : "assistant";
+}
+
+// The elapsed/setup header lines that precede the conversation data.
+function buildContextHeader(elapsedText, mode) {
+    if (mode === "setup") {
+        return "This is the FIRST Chronogram run for this chat: establish the clock, participants and schedules (see SETUP mode in your instructions).";
+    }
+    return elapsedText
+        ? `Time Passed since the previously tracked moment: ${elapsedText}`
+        : "";
+}
+
+function buildContextBlock(elapsedText, mode) {
+    const { history, target } = getContextMessages();
 
     const lines = [];
-    if (mode === "setup") {
-        lines.push("This is the FIRST Chronogram run for this chat: establish the clock, participants and schedules (see SETUP mode in your instructions).");
-    } else if (elapsedText) {
-        lines.push(`Time Passed since the previously tracked moment: ${elapsedText}`);
-    }
+    const header = buildContextHeader(elapsedText, mode);
+    if (header) lines.push(header);
 
     if (history.length > 0) {
-        const historyLines = history.map(m => `${m.name || (m.is_user ? "User" : "Assistant")}: ${m.mes}`).join("\n");
+        const historyLines = history.map(messageLine).join("\n");
         lines.push(`<conversation_context>\n${historyLines}\n</conversation_context>`);
     }
 
-    const targetLines = target.map(m => `${m.name || (m.is_user ? "User" : "Assistant")}: ${m.mes}`).join("\n\n");
+    const targetLines = target.map(messageLine).join("\n\n");
     lines.push(`<exchanges_to_analyze>\nAnalyze the latest exchange:\n\n${targetLines || "(no messages)"}\n</exchanges_to_analyze>`);
 
     return lines.join("\n\n");
+}
+
+// Optional story-reference data sent before the state block: user persona,
+// scenario, character card, World Info and WI outlets. Every part is
+// individually toggleable from the "Tracker Context" settings drawer.
+async function buildStoryInfoBlock(chatStrings) {
+    const settings = extension_settings[extensionName] || {};
+    const st = getST();
+    const parts = [];
+
+    const persona = settings.trackerIncludePersona !== false
+        ? String(substituteParams("{{persona}}") || "").trim() : "";
+    const scenario = settings.trackerIncludeScenario !== false
+        ? String(st.scenario || substituteParams("{{scenario}}") || "").trim() : "";
+
+    let charBlock = "";
+    if (settings.trackerIncludeCharCard !== false) {
+        const char = st.characters?.[st.characterId];
+        if (char) {
+            const cardLines = [
+                char.name ? `<name>${char.name}</name>` : "",
+                char.description ? `<description>${char.description}</description>` : "",
+                char.personality ? `<personality>${char.personality}</personality>` : "",
+            ].filter(Boolean);
+            if (cardLines.length > 0) charBlock = cardLines.join("\n");
+        }
+    }
+
+    const infoLines = [
+        persona ? `<user_persona>\n${persona}\n</user_persona>` : "",
+        scenario ? `<scenario>\n${scenario}\n</scenario>` : "",
+        charBlock ? `<char>\n${charBlock}\n</char>` : "",
+    ].filter(Boolean);
+    if (infoLines.length > 0) {
+        parts.push(`<story_info>\n${infoLines.join("\n")}\n</story_info>`);
+    }
+
+    // World Info + outlets (Recast-style): fetched from the active World Info.
+    const wantsWI = settings.trackerIncludeWorldInfo === true || settings.trackerIncludeWIOutlets === true;
+    if (wantsWI && typeof getWorldInfoPrompt === "function") {
+        try {
+            const wi = await getWorldInfoPrompt(chatStrings, 100000, true);
+            if (wi && typeof wi === "object") {
+                if (settings.trackerIncludeWorldInfo === true) {
+                    const wiText = `${wi.worldInfoBefore || ""}\n${wi.worldInfoAfter || ""}`.trim();
+                    if (wiText) parts.push(`<world_info>\n${wiText}\n</world_info>`);
+                }
+                if (settings.trackerIncludeWIOutlets === true) {
+                    for (const [name, contents] of Object.entries(wi.outletEntries || {})) {
+                        const text = Array.isArray(contents) ? contents.join("\n") : String(contents);
+                        if (text.trim()) parts.push(`<outlet name="${name}">\n${text}\n</outlet>`);
+                    }
+                }
+            }
+        } catch (e) {
+            logDebug("Chronogram: World Info fetch failed (continuing without it):", e);
+        }
+    }
+
+    return parts.join("\n\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -438,14 +534,38 @@ export async function runTracker(messageId = null, options = {}) {
         pipelineBar.start(1, String(st.chat[effectiveMessageId]?.mes ?? ""));
         pipelineBar.updatePass(0, "Tracking chronogram");
 
+        // Assemble the tracker conversation: system prompt, optional story
+        // reference info (persona/scenario/char card/WI/outlets), the current
+        // tracked state, then the conversation context (flat block or roles).
         const messages = [
             { role: "system", content: substituteParams(getChronoPrompt(mode, {
                 trackCharacters: settings.trackCharacters !== false,
                 trackObjectives: settings.trackObjectives !== false,
             })) },
-            { role: "user", content: buildCurrentStateBlock() },
-            { role: "user", content: substituteParams(buildContextBlock(formatElapsed(elapsedMs ?? 0), mode)) },
         ];
+
+        const storyInfo = await buildStoryInfoBlock(
+            st.chat.filter(m => !isGhostMessage(m)).map(m => String(m.mes ?? "")).reverse()
+        );
+        if (storyInfo) messages.push({ role: "user", content: storyInfo });
+
+        messages.push({ role: "user", content: buildCurrentStateBlock() });
+
+        if (settings.contextAsRoles === true) {
+            // "Send Context as Roles": history and the latest exchange go in as
+            // proper user/assistant turns instead of one flat text block.
+            const { history, target } = getContextMessages();
+            for (const m of [...history, ...target]) {
+                messages.push({ role: messageRole(m), content: messageLine(m) });
+            }
+            const header = buildContextHeader(formatElapsed(elapsedMs ?? 0), mode);
+            messages.push({
+                role: "user",
+                content: `${header ? header + "\n\n" : ""}<exchanges_to_analyze>\nAnalyze the latest exchange above.\n</exchanges_to_analyze>`,
+            });
+        } else {
+            messages.push({ role: "user", content: substituteParams(buildContextBlock(formatElapsed(elapsedMs ?? 0), mode)) });
+        }
 
         if (isCancelled) return { skipped: true, reason: "cancelled" };
         const profileId = resolveConnectionProfile(st, settings.trackerProfile || "");

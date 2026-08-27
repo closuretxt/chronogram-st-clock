@@ -32,7 +32,7 @@
     color: var(--SmartThemeBodyColor);
 }
 
-/* Native-looking checkboxes inside the settings drawer */
+/* Settings drawer toggle rows (checkbox itself left to SillyTavern's standard styling) */
 .chrono_settings_content label.checkbox_label {
     display: flex;
     flex-direction: row;
@@ -40,15 +40,6 @@
     gap: 8px;
     margin-bottom: 5px;
     cursor: pointer;
-}
-
-.chrono_settings_content label.checkbox_label input[type="checkbox"] {
-    margin: 0;
-    flex-shrink: 0;
-    width: auto;
-    height: auto;
-    appearance: auto;
-    -webkit-appearance: checkbox;
 }
 
 #chrono_panel {
@@ -195,13 +186,17 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    /* No flex-wrap: badges must never drop onto their own line. */
     margin-bottom: 4px;
 }
 
 .chrono-name {
     font-weight: bold;
     font-size: 1.05em;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .chrono-schedule {
@@ -303,18 +298,23 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    /* No flex-wrap: tags and buttons stay on the title's line. */
 }
 
 .chrono-objective-title {
     font-weight: bold;
     font-size: 1.02em;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .chrono-actions {
     margin-left: auto;
     display: flex;
     gap: 2px;
+    flex-shrink: 0;
 }
 
 .chrono-actions .menu_button {
@@ -410,6 +410,8 @@
        overflow-y never kicks in and long lists just get clipped. */
     min-height: 0;
     overflow-y: auto;
+    /* Never scroll sideways: long lines wrap inside their cards instead. */
+    overflow-x: hidden;
     padding: 10px;
     display: flex;
     flex-direction: column;
@@ -422,6 +424,9 @@
     bottom: 0;
     width: 16px;
     height: 16px;
+    /* Pure overlay: never participates in layout or text flow. */
+    z-index: 5;
+    flex-shrink: 0;
     cursor: nwse-resize;
     background:
         linear-gradient(135deg, transparent 50%, var(--SmartThemeBorderColor, #666) 50%, var(--SmartThemeBorderColor, #666) 60%, transparent 60%, transparent 70%, var(--SmartThemeBorderColor, #666) 70%, var(--SmartThemeBorderColor, #666) 80%, transparent 80%);

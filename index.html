@@ -60,6 +60,41 @@
                 <div class="inline-drawer">
                     <div class="inline-drawer-toggle inline-drawer-header">
                         <div class="flex-container alignitemscenter justifycenter margin0 flex1">
+                            <b>Tracker Context</b>
+                        </div>
+                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                    </div>
+                    <div class="inline-drawer-content">
+                        <label class="checkbox_label" title="Send the {{user}} persona description to the tracker LLM">
+                            <input type="checkbox" id="chrono_include_persona" />
+                            <span>Include User Persona</span>
+                        </label>
+                        <label class="checkbox_label" title="Send the {{scenario}} text to the tracker LLM">
+                            <input type="checkbox" id="chrono_include_scenario" />
+                            <span>Include Scenario</span>
+                        </label>
+                        <label class="checkbox_label" title="Send the current character card (name, description, personality) to the tracker LLM">
+                            <input type="checkbox" id="chrono_include_char_card" />
+                            <span>Include Character Card</span>
+                        </label>
+                        <label class="checkbox_label" title="Send the active World Info entries (worldInfoBefore + worldInfoAfter) to the tracker LLM">
+                            <input type="checkbox" id="chrono_include_world_info" />
+                            <span>Include World Info</span>
+                        </label>
+                        <label class="checkbox_label" title="Send World Info outlet entries as &lt;outlet&gt; blocks to the tracker LLM">
+                            <input type="checkbox" id="chrono_include_wi_outlets" />
+                            <span>Include WI Outlets</span>
+                        </label>
+                        <label class="checkbox_label" title="Send the conversation context as proper user/assistant role messages instead of one flat text block">
+                            <input type="checkbox" id="chrono_context_as_roles" />
+                            <span>Send Context as Roles</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="inline-drawer">
+                    <div class="inline-drawer-toggle inline-drawer-header">
+                        <div class="flex-container alignitemscenter justifycenter margin0 flex1">
                             <b>Advanced Settings</b>
                         </div>
                         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>

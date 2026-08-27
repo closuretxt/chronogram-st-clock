@@ -18,6 +18,13 @@ export const defaultSettings = {
     notificationLevel: "reduced", // "all" | "reduced" | "none"
     trackerProfile: "", // Connection Manager profile id used for the tracker LLM ("" = same as current)
     legacy_api: false, // Swaps connection profiles via slash command before the request
+    // Tracker context enrichment (each part individually toggleable)
+    trackerIncludePersona: true, // {{user}} persona description
+    trackerIncludeScenario: true, // {{scenario}}
+    trackerIncludeCharCard: true, // {{char}} card (name/description/personality)
+    trackerIncludeWorldInfo: false, // Active World Info entries
+    trackerIncludeWIOutlets: false, // WI outlet entries as <outlet> blocks
+    contextAsRoles: false, // Send conversation context as user/assistant role messages instead of one flat block
     debug_mode: false,
     // Popup window customizations (position/size/open state are persisted here).
     chronoWindowOpen: false,
@@ -71,7 +78,7 @@ function debounce(fn) {
 }
 
 export function initSettingsListeners() {
-    $("#chrono_enabled, #chrono_autorun, #chrono_track_characters, #chrono_track_objectives, #chrono_legacy_api, #chrono_debug_mode").on("change", saveSettings);
+    $("#chrono_enabled, #chrono_autorun, #chrono_track_characters, #chrono_track_objectives, #chrono_legacy_api, #chrono_debug_mode, #chrono_include_persona, #chrono_include_scenario, #chrono_include_char_card, #chrono_include_world_info, #chrono_include_wi_outlets, #chrono_context_as_roles").on("change", saveSettings);
     $("#chrono_inject_format, #chrono_notification_level").on("change", saveSettings);
     $("#chrono_profile").on("change", saveSettings);
 
@@ -90,6 +97,12 @@ export function saveSettings() {
     s.trackObjectives = $("#chrono_track_objectives").prop("checked");
     s.legacy_api = $("#chrono_legacy_api").prop("checked");
     s.debug_mode = $("#chrono_debug_mode").prop("checked");
+    s.trackerIncludePersona = $("#chrono_include_persona").prop("checked");
+    s.trackerIncludeScenario = $("#chrono_include_scenario").prop("checked");
+    s.trackerIncludeCharCard = $("#chrono_include_char_card").prop("checked");
+    s.trackerIncludeWorldInfo = $("#chrono_include_world_info").prop("checked");
+    s.trackerIncludeWIOutlets = $("#chrono_include_wi_outlets").prop("checked");
+    s.contextAsRoles = $("#chrono_context_as_roles").prop("checked");
     s.autoRunInterval = Math.max(1, parseInt($("#chrono_auto_run_interval").val(), 10) || 1);
     s.contextDepth = Math.max(0, parseInt($("#chrono_context_depth").val(), 10) || 10);
     s.minMessageLength = Math.max(0, parseInt($("#chrono_min_message_length").val(), 10) || 50);
@@ -115,6 +128,12 @@ export function applySettingsToUI() {
     $("#chrono_track_objectives").prop("checked", s.trackObjectives !== false);
     $("#chrono_legacy_api").prop("checked", s.legacy_api === true);
     $("#chrono_debug_mode").prop("checked", s.debug_mode === true);
+    $("#chrono_include_persona").prop("checked", s.trackerIncludePersona !== false);
+    $("#chrono_include_scenario").prop("checked", s.trackerIncludeScenario !== false);
+    $("#chrono_include_char_card").prop("checked", s.trackerIncludeCharCard !== false);
+    $("#chrono_include_world_info").prop("checked", s.trackerIncludeWorldInfo === true);
+    $("#chrono_include_wi_outlets").prop("checked", s.trackerIncludeWIOutlets === true);
+    $("#chrono_context_as_roles").prop("checked", s.contextAsRoles === true);
     $("#chrono_auto_run_interval").val(s.autoRunInterval ?? 1);
     $("#chrono_context_depth").val(s.contextDepth ?? 10);
     $("#chrono_min_message_length").val(s.minMessageLength ?? 50);
