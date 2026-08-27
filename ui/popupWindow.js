@@ -57,6 +57,12 @@ export class ChronoWindow {
         this.initDrag();
         this.initResize();
 
+        // Re-fit when the browser window changes size, so the chronogram
+        // window can never end up taller than the viewport.
+        $(window).on("resize.chronoWindow", () => {
+            if (this.isOpen) this.applyPosition();
+        });
+
         // Restore last session state: reopen if the user left it open.
         if (getSavedState().chronoWindowOpen === true) {
             this.open();
@@ -109,11 +115,13 @@ export class ChronoWindow {
     }
 
     applyPosition() {
-        const top = this.pos.top ?? Math.max(0, Math.round((window.innerHeight - this.pos.height) / 2));
+        // Keep the window fully inside the viewport: clamp the saved top so
+        // the header stays reachable, then fit the height into what's left.
+        let top = this.pos.top ?? Math.max(0, Math.round((window.innerHeight - this.pos.height) / 2));
+        top = Math.max(0, Math.min(top, window.innerHeight - 120));
         const left = this.pos.left ?? Math.max(0, window.innerWidth - this.pos.width - 40);
-        // Never let a stale saved size push the window off-screen: an
-        // off-screen-height window looks exactly like "scrolling is broken".
-        const height = Math.max(240, Math.min(this.pos.height, window.innerHeight - 20));
+        const height = Math.max(240, Math.min(this.pos.height, window.innerHeight - top - 10));
+        this.pos.top = top;
         this.pos.height = height;
         this.$panel.css({ width: this.pos.width, height, top, left });
         this.layoutContent();
@@ -164,7 +172,11 @@ export class ChronoWindow {
         $(document).on("mousemove.chronoWindowResize", (e) => {
             if (!resize) return;
             const w = Math.max(300, resize.startW + (e.clientX - resize.startX));
-            const h = Math.max(240, resize.startH + (e.clientY - resize.startY));
+            // Hard cap: the window must never grow past the viewport bottom,
+            // otherwise the content scrollbar is off-screen and unreachable.
+            const currentTop = parseFloat(this.$panel.css("top")) || 0;
+            const maxH = Math.max(240, window.innerHeight - currentTop - 10);
+            const h = Math.max(240, Math.min(resize.startH + (e.clientY - resize.startY), maxH));
             this.pos.width = w;
             this.pos.height = h;
             this.$panel.css({ width: w, height: h });

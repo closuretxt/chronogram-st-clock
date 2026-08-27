@@ -363,6 +363,8 @@
     z-index: 1;
     display: none;
     flex-direction: column;
+    /* Safety net: no code path may make the window taller than the screen. */
+    max-height: calc(100vh - 10px);
     background: var(--SmartThemeBlurTintColor, rgba(24, 24, 34, 0.95));
     color: var(--SmartThemeBodyColor, #ddd);
     border: 1px solid var(--SmartThemeBorderColor, #444);
