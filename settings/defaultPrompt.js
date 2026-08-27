@@ -28,7 +28,7 @@ Date:04/13/2026
 21:00 free time - reachable by {{user}}
 23:00 retires to his chambers
 </new_schedule>
-6-10 entries spanning waking to sleep. EVERY entry concrete: task, place, company, purpose - rooted in the character's role, habits and objectives. Never generic filler like "spends the day busy". {{user}} gets one too, even a loose one. Never tag an entry as current. Always a real 4-digit year in Date: - never "YYYY".`;
+8-15 entries spanning waking to sleep. EVERY entry concrete: task, place, company, purpose - rooted in the character's role, habits and objectives. Never generic filler like "spends the day busy". {{user}} gets one too, even a loose one. Never tag an entry as current. Always a real 4-digit year in Date: - never "YYYY".`;
 
 const OUTPUT_OBJECTIVES = `SUBSTANTIAL long-term goals only: story-shaping, with real stakes, spanning multiple scenes or days (quests, debts, rivalries, secrets, careers). Creating NONE is preferred over creating filler. No errands, nothing resolvable within the current scene, no vague flavor goals.
 <new_objective>
