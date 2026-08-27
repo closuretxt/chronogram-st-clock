@@ -5,6 +5,7 @@
 
 import { macros as macroSystem } from "../../../../macros/macro-system.js";
 import { extension_settings } from "../../../../extensions.js";
+import { saveSettingsDebounced } from "../../../../../script.js";
 import {
     getClock,
     getParticipants,
@@ -238,11 +239,25 @@ function renderParticipantCard(id, p) {
         </div>`;
 }
 
-// Whether the "add objective" form is folded open. Kept at module level so
-// panel re-renders (which happen on every tracker run) don't slam it shut.
+// Drawer states. Kept at module level so panel re-renders (which happen on
+// every tracker run) don't slam them shut, and persisted in extension
+// settings so both the settings panel and the popup reopen exactly as you
+// left them, even after a page reload.
 let _addFormOpen = false;
-// Whether the Objectives drawer is expanded. Starts collapsed for a tidy panel.
-let _objectivesOpen = false;
+
+function getDrawerState(key, fallback) {
+    const v = extension_settings[extensionName]?.[key];
+    return v === undefined ? fallback : v === true;
+}
+
+function setDrawerState(key, value) {
+    if (!extension_settings[extensionName]) extension_settings[extensionName] = {};
+    extension_settings[extensionName][key] = value;
+    saveSettingsDebounced();
+}
+
+let _objectivesOpen = getDrawerState("chronoObjectivesOpen", false);
+let _charactersOpen = getDrawerState("chronoCharactersOpen", true);
 
 // The shared HTML used by BOTH the settings-drawer panel and the popup window.
 export function renderPanelHTML() {
@@ -266,9 +281,26 @@ export function renderPanelHTML() {
     const objectiveCards = objectives.map(renderObjectiveCard).join("")
         || '<div class="chrono-empty-small">No objectives tracked.</div>';
 
-    const participantsHtml = !trackCharacters ? "" : `
-        <div class="chrono-section-header"><i class="fa-solid fa-users"></i><span>Participants</span></div>
-        ${participants.map(([id, p]) => renderParticipantCard(id, p)).join("") || '<div class="chrono-empty-small">No participants yet.</div>'}`;
+    // {{user}}'s chronogram stands on its own card; every other character
+    // lives inside a collapsible drawer.
+    const userEntry = participants.find(([id]) => id === "user");
+    const otherEntries = participants.filter(([id]) => id !== "user");
+
+    const userHtml = !trackCharacters || !userEntry ? "" : `
+        <div class="chrono-section-header"><i class="fa-solid fa-user"></i><span>Your Chronogram</span></div>
+        ${renderParticipantCard(userEntry[0], userEntry[1])}`;
+
+    const charactersHtml = !trackCharacters ? "" : `
+        <div class="chrono-drawer${_charactersOpen ? "" : " chrono-drawer-closed"}">
+            <div class="chrono-drawer-header" id="chrono_characters_header" title="Click to collapse or expand character chronograms">
+                <i class="fa-solid fa-users"></i><span>Characters</span>
+                <span class="chrono-drawer-count">${otherEntries.length}</span>
+                <i class="fa-solid fa-chevron-down chrono-drawer-chevron"></i>
+            </div>
+            <div class="chrono-drawer-content">
+                ${otherEntries.map(([id, p]) => renderParticipantCard(id, p)).join("") || '<div class="chrono-empty-small">No characters tracked yet.</div>'}
+            </div>
+        </div>`;
 
     const objectivesHtml = !trackObjectives ? "" : `
         <div class="chrono-drawer${_objectivesOpen ? "" : " chrono-drawer-closed"}">
@@ -296,7 +328,7 @@ export function renderPanelHTML() {
                 <input type="text" id="chrono_clock_time" class="text_pole" value="${escapeHtml(clock?.time ?? "")}" placeholder="HH:MM" maxlength="5" style="width:70px;">
                 <button id="chrono_clock_save" class="menu_button menu_button_icon" title="Save the clock manually"><i class="fa-solid fa-floppy-disk"></i></button>
             </div>
-        </div>${participantsHtml}${objectivesHtml}`;
+        </div>${userHtml}${charactersHtml}${objectivesHtml}`;
 }
 
 // Re-renders the drawer panel and keeps the floating popup in sync.
@@ -355,10 +387,18 @@ function bindPanelHandlers() {
         refreshChronoPanel();
     });
 
+    // Collapse/expand the characters chronogram drawer.
+    $doc.on("click", "#chrono_characters_header", () => {
+        _charactersOpen = !_charactersOpen;
+        setDrawerState("chronoCharactersOpen", _charactersOpen);
+        refreshChronoPanel();
+    });
+
     // Collapse/expand the objectives drawer (the "+" button inside is excluded).
     $doc.on("click", "#chrono_objectives_header", (e) => {
         if ($(e.target).closest("#chrono_toggle_add_objective").length > 0) return;
         _objectivesOpen = !_objectivesOpen;
+        setDrawerState("chronoObjectivesOpen", _objectivesOpen);
         refreshChronoPanel();
     });
 
