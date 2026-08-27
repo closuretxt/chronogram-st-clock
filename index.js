@@ -3,7 +3,7 @@
 // swipe/delete rollback for the per-chat chronogram state.
 
 // IMPORTS
-import { extension_settings, getContext } from "../../../extensions.js";
+import { extension_settings, getContext } from "../../../../extensions.js";
 // Settings
 import { loadSettings, saveSettings, defaultSettings, initSettingsListeners, applySettingsToUI } from "./settings/settingsManager.js";
 export { loadSettings, saveSettings, defaultSettings };
