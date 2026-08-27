@@ -249,3 +249,60 @@
     border-bottom: 3px solid rgba(128, 128, 128, 0.5);
     border-bottom-right-radius: 10px;
 }
+
+/* ---------- Tracker pipeline progress bar ---------- */
+#chrono_progress_bar {
+    display: none;
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 110px;
+    z-index: 99998;
+    width: min(480px, 80vw);
+    padding: 8px 12px;
+    background: var(--SmartThemeBlurTintColor, #1a1a1f);
+    color: var(--SmartThemeBodyColor, #ddd);
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.15));
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(8px);
+    font-size: 0.9em;
+}
+
+.chrono-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+#chrono_progress_text {
+    flex: 1;
+}
+
+#chrono_stop_pipeline {
+    flex: none;
+    padding: 2px 6px;
+}
+
+#chrono_progress_track {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(128, 128, 128, 0.25);
+    overflow: hidden;
+}
+
+#chrono_progress_fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(96, 150, 255, 0.9), rgba(96, 200, 255, 0.9));
+    transition: width 0.3s ease;
+}
+
+/* Shield the chat input while the tracker pipeline is running */
+#form_sheld.chrono-input-active #send_but,
+#form_sheld.chrono-input-active #mes_stop {
+    pointer-events: none;
+    opacity: 0.5;
+}

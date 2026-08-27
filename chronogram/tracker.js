@@ -21,8 +21,6 @@ import {
     getClock,
     setClock,
     tickClock,
-    advanceClock,
-    clampClockToDate,
     getOrCreateParticipant,
     getParticipants,
     replaceSchedule,
@@ -32,11 +30,12 @@ import {
     updateObjective,
     setObjectiveStatus,
     formatElapsed,
-    nowDateTime,
     createSnapshot,
     restoreSnapshot,
+    saveState,
 } from "./state.js";
 import { parseChronoResponse } from "./parser.js";
+import { pipelineBar } from "../ui/pipelineBar.js";
 
 export const extensionName = "Chronogram";
 
@@ -411,6 +410,7 @@ export async function runTracker(messageId = null, options = {}) {
     lastRunMessageId = effectiveMessageId;
     isCancelled = false;
 
+    let barCompleted = false;
     try {
         const root = getStateRoot();
         const mode = root.anchored ? "normal" : "setup";
@@ -419,6 +419,11 @@ export async function runTracker(messageId = null, options = {}) {
         if (typeof st.ConnectionManagerRequestService?.sendRequest !== "function") {
             throw new Error("ConnectionManagerRequestService is unavailable. Is the Connection Manager extension enabled?");
         }
+
+        // Progress bar with a stop button (mirrors Persist's pipeline bar).
+        pipelineBar.init(cancelTracker);
+        pipelineBar.start(1, String(st.chat[effectiveMessageId]?.mes ?? ""));
+        pipelineBar.updatePass(0, "Tracking chronogram");
 
         const messages = [
             { role: "system", content: substituteParams(getChronoPrompt(mode)) },
@@ -433,6 +438,7 @@ export async function runTracker(messageId = null, options = {}) {
 
         const cleaned = parse_reasoning(raw, profileId);
         logDebug("Chronogram raw response:", cleaned);
+        pipelineBar.updatePass(0, "Applying update");
 
         const update = parseChronoResponse(cleaned);
         const hasAnything = update.clock !== null
@@ -450,6 +456,9 @@ export async function runTracker(messageId = null, options = {}) {
 
         const event = applyUpdate(update, elapsedMs);
 
+        pipelineBar.complete();
+        barCompleted = true;
+
         notifyEvent(event);
         const { refreshChronoPanel } = await import("./injection.js");
         refreshChronoPanel();
@@ -462,6 +471,7 @@ export async function runTracker(messageId = null, options = {}) {
         lastRunMessageId = -1; // Allow retry on failure
         return { skipped: true, reason: "error", error };
     } finally {
+        if (!barCompleted) pipelineBar.hide();
         isRunning = false;
         isCancelled = false;
     }

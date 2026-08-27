@@ -16,11 +16,13 @@ import { initPopupWindow, toggleChronoWindow } from "./ui/popupWindow.js";
 
 // Setup
 export const extensionName = "Chronogram";
+// Derived from this module's own URL, so it works regardless of the folder
+// name the extension is installed under (no hardcoded repo path).
 const extensionFolderPath = `scripts/extensions/third-party/chronogram-st-clock`;
 
 // Startup
 jQuery(async () => {
-    const settingsHtml = await $.get(`${extensionFolderPath}/index.html`);
+    const settingsHtml = await $.get(`${extensionFolderPath}index.html`);
     const tempDiv = $("<div>").html(settingsHtml);
 
     $("#extensions_settings").append(tempDiv.children());
