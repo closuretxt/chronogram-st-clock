@@ -10,15 +10,15 @@
 const OUTPUT_HEADER = `Emit ONLY the blocks described below. No commentary.`;
 
 const OUTPUT_CLOCK = `<clock_update>
-Date:MM/DD/YYYY
-Time:HH:MM
+Date:04/12/2026
+Time:08:30
 </clock_update>
-Exactly ONE per run. New ABSOLUTE values (24h time), not deltas. Advance by what actually happened in the scene: minutes if seamless, hours or days if the story moved.`;
+Exactly ONE per run. Always write CONCRETE values (MM/DD/YYYY with a real 4-digit year, 24h HH:MM) - never placeholder text like "YYYY". New ABSOLUTE values, not deltas. Advance by what actually happened in the scene: minutes if seamless, hours or days if the story moved.`;
 
 const OUTPUT_SCHEDULE = `One <new_schedule> per character PRESENT in the latest exchange (plus {{user}} as "User"), ONLY when the clock crosses into a NEW calendar date. Characters absent from the exchange are off-screen: skip them entirely (they rejoin automatically when they return).
 <new_schedule>
 Owner:Aldric
-Date:MM/DD/YYYY
+Date:04/13/2026
 07:00 wakes up, drills with the guard in the courtyard
 09:00 court petitions in the great hall
 12:00 private lunch with his steward
@@ -28,7 +28,7 @@ Date:MM/DD/YYYY
 21:00 free time - reachable by {{user}}
 23:00 retires to his chambers
 </new_schedule>
-6-10 entries spanning waking to sleep. EVERY entry concrete: task, place, company, purpose - rooted in the character's role, habits and objectives. Never generic filler like "spends the day busy". {{user}} gets one too, even a loose one. Never tag an entry as current.`;
+6-10 entries spanning waking to sleep. EVERY entry concrete: task, place, company, purpose - rooted in the character's role, habits and objectives. Never generic filler like "spends the day busy". {{user}} gets one too, even a loose one. Never tag an entry as current. Always a real 4-digit year in Date: - never "YYYY".`;
 
 const OUTPUT_OBJECTIVES = `SUBSTANTIAL long-term goals only: story-shaping, with real stakes, spanning multiple scenes or days (quests, debts, rivalries, secrets, careers). Creating NONE is preferred over creating filler. No errands, nothing resolvable within the current scene, no vague flavor goals.
 <new_objective>

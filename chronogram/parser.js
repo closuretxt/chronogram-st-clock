@@ -1,6 +1,6 @@
 // Tolerant regex-based parser for Chronogram tracker LLM output.
 
-import { resolveOwnerId, parseDateMDY, parseTimeHM } from "./state.js";
+import { resolveOwnerId, parseDateMDY, parseTimeHM, getClock } from "./state.js";
 
 const CLOCK_RE = /<clock_update>([\s\S]*?)<\/\s*clock_update>/gi;
 const SCHEDULE_RE = /<new_schedule>([\s\S]*?)<\/\s*new_schedule>/gi;
@@ -23,6 +23,27 @@ function parseFields(body) {
         }
     }
     return fields;
+}
+
+// Models sometimes copy the "MM/DD/YYYY" template literally and emit dates
+// like "04/12/YYYY". Repair those: fill the placeholder year from the tracked
+// clock (so it stays in the story's timeline), falling back to the real-world
+// current year.
+function fallbackYear() {
+    const fromClock = getClock()?.date?.match(/(\d{4})\s*$/);
+    if (fromClock) return fromClock[1];
+    return String(new Date().getFullYear());
+}
+
+function repairDate(value) {
+    const date = String(value || "").replace(/\u200b/g, "").trim();
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(date)) return date;
+    // "04/12/YYYY", "04/12/YY", "04/12/__", "04/12/" or bare "04/12"
+    const partial = date.match(/^(\d{1,2})\/(\d{1,2})\s*\/?\s*(?:Y{2,4}|y{2,4}|\?+|_+|X{2,4})?$/);
+    if (partial) {
+        return `${partial[1].padStart(2, "0")}/${partial[2].padStart(2, "0")}/${fallbackYear()}`;
+    }
+    return date;
 }
 
 // Parses the free lines of a <new_schedule> body into [{time, activity}].
@@ -68,7 +89,7 @@ export function parseChronoResponse(responseText) {
     CLOCK_RE.lastIndex = 0;
     while ((m = CLOCK_RE.exec(text)) !== null) {
         const f = parseFields(m[1]);
-        const date = String(f.Date || "").replace(/\u200b/g, "").trim();
+        const date = repairDate(f.Date);
         const time = String(f.Time || "").trim();
         if (parseDateMDY(date) && parseTimeHM(time) !== null) {
             result.clock = { date, time };
@@ -80,7 +101,7 @@ export function parseChronoResponse(responseText) {
         const inner = m[1];
         const f = parseFields(inner);
         if (!f.Owner) continue;
-        const date = String(f.Date || "").trim();
+        const date = repairDate(f.Date);
         if (!parseDateMDY(date)) continue;
         const entries = parseScheduleEntries(inner);
         if (entries.length === 0) continue;
