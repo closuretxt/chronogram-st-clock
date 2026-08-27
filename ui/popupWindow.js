@@ -71,7 +71,11 @@ export class ChronoWindow {
         this.init();
         if (this.isOpen) return;
         this.applyPosition();
-        this.$panel.fadeIn(150);
+        // Re-assert flex BEFORE showing: the inline template style is
+        // display:none, and jQuery's fadeIn would otherwise restore the div
+        // to its default display:block, losing flex-direction column and
+        // with it the content's scroll behavior.
+        this.$panel.css("display", "flex").hide().fadeIn(150);
         this.isOpen = true;
         savePanelState({ chronoWindowOpen: true });
     }

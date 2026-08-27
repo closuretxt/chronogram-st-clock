@@ -410,6 +410,9 @@
 
 #chrono_window_content {
     flex: 1;
+    /* Allow the content to shrink below its intrinsic height, otherwise
+       overflow-y never kicks in and long lists just get clipped. */
+    min-height: 0;
     overflow-y: auto;
     padding: 10px;
     display: flex;
