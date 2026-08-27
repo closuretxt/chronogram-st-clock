@@ -61,6 +61,13 @@ const OBJECTIVES_DISABLED_NOTE = `Objective tracking is DISABLED: never emit <ne
 const SETUP_RULES = `## SETUP (first run of this chat)
 Infer the current in-fiction date/time from the story so far (default mid-day 12:00) and emit its clock_update. Establish every character present in the opening scene plus "User" with a full schedule for today each. Add any objective genuinely grounded in the fiction - or none.`;
 
+// Describes how each request is laid out so the model knows where to look.
+// The <chronogram_state> block is deliberately the LAST message, right before
+// the response: it is the freshest reference, already rolled back to the
+// previous tracked moment on swipe/manual re-runs.
+const INPUT_STRUCTURE = `## INPUT
+Each request arrives as: (1) this instruction, (2) optional <story_info> reference data, (3) the conversation context (<conversation_context> or role turns) ending with the <exchanges_to_analyze> block, and (4) as the VERY LAST message, <chronogram_state>: the current tracked state (world clock, PRESENT characters' schedules, objectives). Treat <chronogram_state> as the authoritative starting point to advance from.`;
+
 const NORMAL_RULES = `## TRACKING
 Using Time Passed and what happened, advance the clock, generate schedules at midnight crossings, and maintain objectives. A quiet continuation needs only clock_update. Leave off-screen characters untouched.`;
 
@@ -83,5 +90,5 @@ export function getChronoPrompt(mode, { trackCharacters = true, trackObjectives 
         sections.push(OBJECTIVES_DISABLED_NOTE);
     }
 
-    return `${header}\n\n${rules}\n\n${sections.join("\n\n")}`;
+    return `${header}\n\n${INPUT_STRUCTURE}\n\n${rules}\n\n${sections.join("\n\n")}`;
 }

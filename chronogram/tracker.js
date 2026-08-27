@@ -535,8 +535,9 @@ export async function runTracker(messageId = null, options = {}) {
         pipelineBar.updatePass(0, "Tracking chronogram");
 
         // Assemble the tracker conversation: system prompt, optional story
-        // reference info (persona/scenario/char card/WI/outlets), the current
-        // tracked state, then the conversation context (flat block or roles).
+        // reference info (persona/scenario/char card/WI/outlets), the
+        // conversation context (flat block or roles), then the current
+        // tracked state LAST, right before the response.
         const messages = [
             { role: "system", content: substituteParams(getChronoPrompt(mode, {
                 trackCharacters: settings.trackCharacters !== false,
@@ -548,8 +549,6 @@ export async function runTracker(messageId = null, options = {}) {
             st.chat.filter(m => !isGhostMessage(m)).map(m => String(m.mes ?? "")).reverse()
         );
         if (storyInfo) messages.push({ role: "user", content: storyInfo });
-
-        messages.push({ role: "user", content: buildCurrentStateBlock() });
 
         if (settings.contextAsRoles === true) {
             // "Send Context as Roles": history and the latest exchange go in as
@@ -566,6 +565,11 @@ export async function runTracker(messageId = null, options = {}) {
         } else {
             messages.push({ role: "user", content: substituteParams(buildContextBlock(formatElapsed(elapsedMs ?? 0), mode)) });
         }
+
+        // Current tracked state goes LAST, after the full context history and
+        // exchanges, so it sits closest to where the response is generated as
+        // the freshest reference.
+        messages.push({ role: "user", content: buildCurrentStateBlock() });
 
         if (isCancelled) return { skipped: true, reason: "cancelled" };
         const profileId = resolveConnectionProfile(st, settings.trackerProfile || "");
