@@ -93,12 +93,33 @@ export function formatElapsed(ms) {
     return parts.join(" ");
 }
 
-// Any owner reported by the LLM that means the user ("User", "{{user}}", "You")
-// resolves to the reserved id "user".
+// Any owner reported by the LLM that means the user ("User", "{{user}}",
+// "You", or literally the current persona's name) resolves to the reserved
+// id "user". Without the persona-name match the tracker would file the
+// user's own schedule/activity/objectives under a separate look-alike
+// participant whenever the model wrote Owner:<persona name>.
 export function resolveOwnerId(name) {
     const n = String(name || "").trim();
     if (!n || /^(?:\{\{user\}\}|user|you)$/i.test(n)) return "user";
+    if (isPersonaName(n)) return "user";
     return n.replace(/\s+/g, "_");
+}
+
+function getCurrentPersonaName() {
+    try {
+        return String(window.SillyTavern?.getContext?.()?.name1 || "").trim();
+    } catch {
+        return "";
+    }
+}
+
+// True when the given owner string refers to the user's persona
+// ("Curren Chan", "curren_chan", etc.).
+function isPersonaName(s) {
+    const persona = getCurrentPersonaName().toLowerCase();
+    if (!persona) return false;
+    const norm = String(s || "").trim().toLowerCase().replaceAll("_", " ");
+    return !!norm && norm === persona;
 }
 
 export function getDisplayName(ownerId) {
@@ -143,7 +164,58 @@ export function getStateRoot() {
     for (const p of Object.values(root.participants)) {
         if (typeof p.active !== "boolean") p.active = true;
     }
+    migrateUserAlias(root);
     return root;
+}
+
+// Older tracker runs could file the user's data under their persona name
+// (e.g. id "Curren_Chan") instead of the reserved "user" id, leaving the
+// user without a card. Merge any such look-alike participant into "user":
+// activity, schedules and objectives all move across, the duplicate is
+// deleted. Runs at most once per session.
+let _userAliasMigrated = false;
+function migrateUserAlias(root) {
+    if (_userAliasMigrated) return;
+    const persona = getCurrentPersonaName();
+    if (!persona) return;
+    _userAliasMigrated = true;
+
+    const aliasIds = Object.keys(root.participants).filter(id => {
+        if (id === "user") return false;
+        const p = root.participants[id];
+        return id.replaceAll("_", " ").toLowerCase() === persona.toLowerCase()
+            || String(p?.name || "").trim().toLowerCase() === persona.toLowerCase();
+    });
+    if (aliasIds.length === 0) return;
+
+    const user = root.participants.user = root.participants.user
+        || { name: persona, activity: "", active: true };
+    user.name = persona; // the user card always shows the persona's name
+    user.active = true;
+
+    for (const aliasId of aliasIds) {
+        const alias = root.participants[aliasId];
+        if (alias && !user.activity) user.activity = alias.activity || "";
+        const aliasSched = root.schedules[aliasId] || {};
+        root.schedules.user = root.schedules.user || {};
+        for (const [date, entries] of Object.entries(aliasSched)) {
+            const existing = root.schedules.user[date];
+            if (!Array.isArray(existing) || existing.length === 0) {
+                root.schedules.user[date] = entries;
+            }
+        }
+        delete root.schedules[aliasId];
+        delete root.participants[aliasId];
+    }
+
+    let touchedObjectives = false;
+    for (const o of root.objectives) {
+        if (aliasIds.includes(o.owner)) {
+            o.owner = "user";
+            touchedObjectives = true;
+        }
+    }
+    if (aliasIds.length > 0 || touchedObjectives) saveState();
 }
 
 export function saveState() {
@@ -220,7 +292,11 @@ export function updateActiveParticipants() {
             && m.is_hidden !== true && m.is_hidden !== "true"
             && String(m.mes ?? "").trim())
         .slice(-ACTIVE_LOOKBACK)
-        .map(m => String(m.mes).toLowerCase())
+        // Count BOTH the message text and its author: a character who just
+        // spoke is present even if nobody said their name in the prose
+        // (the user's own persona name almost never appears in their own
+        // messages, yet they are obviously in the scene).
+        .map(m => `${String(m.name ?? "")}\n${String(m.mes ?? "")}`.toLowerCase())
         .join("\n");
     for (const [id, p] of Object.entries(root.participants)) {
         if (id === "user") {
