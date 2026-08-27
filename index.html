@@ -1,0 +1,120 @@
+<!-- Chronogram - ST Clock & Objective Tracker -->
+<div id="chrono_extension_settings" class="chrono_settings_content">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <div class="flex-container alignitemscenter justifycenter margin0 flex1">
+                <b id="chrono_title" title="Chronogram Clock & Objective Tracker">Chronogram | Clock & Objectives</b>
+            </div>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+
+        <div class="inline-drawer-content">
+            <div class="chrono_settings_content">
+                <div class="chrono-warning" title="Without this macro the tracked data is never sent to the LLM">
+                    ⚠️ Do not forget to put the macro <code>{{chronogram}}</code> in your prompt in order for it to work.
+                </div>
+
+                <hr>
+
+                <div class="flex-container justifyspacebetween alignitemscenter">
+                    <button id="chrono_run_tracker" class="menu_button flex1" title="Run the chronogram tracker LLM on the latest AI message"><i class="fa-solid fa-clock-rotate-left"></i><span> Run Chronogram Now</span></button>
+                </div>
+                <div class="flex-container justifyspacebetween alignitemscenter" style="margin-top: 6px;">
+                    <button id="chrono_toggle_window" class="menu_button flex1" title="Toggle the floating chronogram window (draggable & resizable)"><i class="fa-solid fa-window-restore"></i><span> Chronogram Window</span></button>
+                </div>
+
+                <hr>
+
+                <h4 class="textAlignCenter">Global Settings</h4>
+
+                <label class="checkbox_label" title="Enable the entire Chronogram extension">
+                    <input type="checkbox" id="chrono_enabled" />
+                    <span>Enable Extension</span>
+                </label>
+                <label class="checkbox_label" title="Automatically run the tracker after every AI message">
+                    <input type="checkbox" id="chrono_autorun" />
+                    <span>Auto-run tracker on AI messages</span>
+                </label>
+                <label class="checkbox_label" title="Swap connection profiles with a slash command instead of using ConnectionManagerRequestService directly">
+                    <input type="checkbox" id="chrono_legacy_api" />
+                    <span>Legacy Connection Profile</span>
+                </label>
+                <label class="checkbox_label" title="Print verbose logs to console for debugging">
+                    <input type="checkbox" id="chrono_debug_mode" />
+                    <span>Debug Mode</span>
+                </label>
+
+                <div class="flex-container alignitemscenter" style="margin: 8px 0;" title="How often the tracker runs: 1 = every turn (a user + AI exchange), 2 = every other turn...">
+                    <span style="min-width: 160px;">Run every X turns:</span>
+                    <input id="chrono_auto_run_interval" type="number" min="1" max="50" step="1" class="text_pole flex1" />
+                </div>
+                <div class="flex-container alignitemscenter" style="margin: 8px 0;" title="How many past messages are sent to the tracker for context only">
+                    <span style="min-width: 160px;">Context Depth:</span>
+                    <input id="chrono_context_depth" type="number" min="0" max="100" step="1" class="text_pole flex1" />
+                </div>
+
+                <div class="flex-container alignitemscenter" style="margin: 8px 0;" title="Messages shorter than this are skipped by automatic runs">
+                    <span style="min-width: 160px;">Min Message Length:</span>
+                    <input id="chrono_min_message_length" type="number" min="0" max="2000" step="10" class="text_pole flex1" />
+                </div>
+                <div class="flex-container alignitemscenter" style="margin: 8px 0;" title="Seconds to wait before sending the tracker request">
+                    <span style="min-width: 160px;">Trigger Delay:</span>
+                    <input id="chrono_delay_trigger" type="number" min="0" max="300" step="1" class="text_pole flex1" />
+                </div>
+
+                <div class="flex-container alignitemscenter" style="margin: 8px 0;" title="Minimum story time that passes between two runs, even if they happen back to back (written as minutes)">
+                    <span style="min-width: 160px;">Min Time Per Turn:</span>
+                    <input id="chrono_min_minutes_turn" type="number" min="0" max="600" step="5" class="text_pole flex1" />
+                    <span>minutes</span>
+                </div>
+                <div class="flex-container alignitemscenter" style="margin: 8px 0;" title="Cap on how far the clock may advance between two runs so idle time doesn't skip whole days (24 = at most one day per run)">
+                    <span style="min-width: 160px;">Max Advance Per Run:</span>
+                    <input id="chrono_max_advance_hours" type="number" min="0" max="168" step="1" class="text_pole flex1" />
+                    <span>hours</span>
+                </div>
+
+                <div class="flex-container alignitemscenter" style="margin: 8px 0;" title="How {{chronogram}} injects the data: Full = wrapped with an explanation; Raw = bare block only; None = not injected">
+                    <span style="min-width: 160px;">Macro Format:</span>
+                    <select id="chrono_inject_format" class="text_pole flex1">
+                        <option value="full">Full (wrapped + explanation)</option>
+                        <option value="raw">Raw (bare block)</option>
+                        <option value="none">None</option>
+                    </select>
+                </div>
+                <div class="flex-container alignitemscenter" style="margin: 8px 0;" title="Toast popups when the day changes or objectives complete: All = full detail; Reduced = day change + completions; None = silent">
+                    <span style="min-width: 160px;">Notifications:</span>
+                    <select id="chrono_notification_level" class="text_pole flex1">
+                        <option value="all">All</option>
+                        <option value="reduced">Reduced</option>
+                        <option value="none">None</option>
+                    </select>
+                </div>
+                <div class="flex-container alignitemscenter" style="margin: 8px 0;" title="Connection Manager profile used for the separate tracker LLM pass">
+                    <span style="min-width: 160px;">Tracker Profile:</span>
+                    <select id="chrono_profile" class="text_pole flex1"></select>
+                </div>
+
+                <hr>
+
+                <div class="inline-drawer">
+                    <div class="inline-drawer-toggle inline-drawer-header">
+                        <div class="flex-container alignitemscenter justifycenter margin0 flex1">
+                            <b>Chronogram Data</b>
+                        </div>
+                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                    </div>
+                    <div class="inline-drawer-content">
+                        <div class="flex-container justifyspacebetween alignitemscenter" style="margin-top: 8px;">
+                            <button id="chrono_reset_chat" class="menu_button red_button flex1" title="Delete ALL chronogram data for this chat (clock, schedules, objectives)">
+                                <i class="fa-solid fa-trash-can"></i><span>Reset Chat Data</span>
+                            </button>
+                        </div>
+                        <div id="chrono_panel"></div>
+                    </div>
+                </div>
+
+                <hr>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,378 @@
+// Per-chat persistent Chronogram state store.
+// State lives in chat_metadata.chronogram so it is saved/restored with the
+// chat itself, exactly like Persist keeps its relationship data.
+
+import { getContext } from "../../../../extensions.js";
+
+const STATE_KEY = "chronogram";
+
+// ---------------------------------------------------------------------------
+// Date/time helpers (everything uses MM/DD/YYYY + 24h HH:MM)
+// ---------------------------------------------------------------------------
+
+export function pad2(n) {
+    return String(n).padStart(2, "0");
+}
+
+export function formatDate(d) {
+    return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}/${d.getFullYear()}`;
+}
+
+export function formatTime(d) {
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+export function nowDateTime() {
+    const n = new Date();
+    return { date: formatDate(n), time: formatTime(n) };
+}
+
+// "12/05/2026" -> Date | null
+export function parseDateMDY(s) {
+    const m = String(s || "").match(/(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})/);
+    if (!m) return null;
+    const d = new Date(parseInt(m[3], 10), parseInt(m[1], 10) - 1, parseInt(m[2], 10));
+    return isNaN(d.getTime()) ? null : d;
+}
+
+// "14:30" or "2:30 PM" best-effort -> minutes since midnight | null
+export function parseTimeHM(s) {
+    const str = String(s || "").trim();
+    let m = str.match(/^(\d{1,2}):(\d{2})/);
+    if (m) {
+        const h = ((parseInt(m[1], 10) % 24) + 24) % 24;
+        return h * 60 + Math.min(59, parseInt(m[2], 10));
+    }
+    m = str.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$/i);
+    if (m) {
+        let h = parseInt(m[1], 10) % 12;
+        if (/pm/i.test(m[3])) h += 12;
+        return h * 60 + Math.min(59, parseInt(m[2] || "0", 10));
+    }
+    return null;
+}
+
+export function isValidDateString(s) {
+    return parseDateMDY(s) !== null;
+}
+
+// {date,time} (or Date) -> Date instance carrying both fields.
+export function toClockDate(clock) {
+    if (clock instanceof Date) return isNaN(clock.getTime()) ? null : clock;
+    const base = parseDateMDY(clock?.date);
+    if (!base) return null;
+    const t = parseTimeHM(clock?.time);
+    if (t !== null) base.setMinutes(t);
+    return base;
+}
+
+export function clampClockToDate(clockDate) {
+    if (!(clockDate instanceof Date) || isNaN(clockDate.getTime())) return null;
+    return {
+        date: formatDate(clockDate),
+        time: formatTime(clockDate),
+    };
+}
+
+// Advances a stored clock by ms. Returns the NEW stored value.
+export function advanceClock(clock, ms) {
+    const base = toClockDate(clock) ?? new Date();
+    return clampClockToDate(new Date(base.getTime() + ms));
+}
+
+// Formats a duration as compact shorthand: "1d 3h 45m".
+export function formatElapsed(ms) {
+    const mins = Math.max(0, Math.round(ms / 60000));
+    const days = Math.floor(mins / 1440);
+    const hours = Math.floor((mins % 1440) / 60);
+    const minutes = mins % 60;
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
+    return parts.join(" ");
+}
+
+// Any owner reported by the LLM that means the user ("User", "{{user}}", "You")
+// resolves to the reserved id "user".
+export function resolveOwnerId(name) {
+    const n = String(name || "").trim();
+    if (!n || /^(?:\{\{user\}\}|user|you)$/i.test(n)) return "user";
+    return n.replace(/\s+/g, "_");
+}
+
+export function getDisplayName(ownerId) {
+    if (ownerId === "user") {
+        try {
+            const name = window.SillyTavern?.getContext?.()?.name1;
+            if (name) return name;
+        } catch { /* ignore */ }
+        return "User";
+    }
+    return getParticipants()[ownerId]?.name || ownerId;
+}
+
+// ---------------------------------------------------------------------------
+// State root
+// ---------------------------------------------------------------------------
+
+function defaultRoot() {
+    return {
+        anchored: false, // false until the setup run establishes the clock
+        clock: null, // { date: "MM/DD/YYYY", time: "HH:MM" } - shared world clock
+        participants: {}, // id -> { name, activity }
+        schedules: {}, // ownerId -> { [dateStr]: [{ time, activity }] }
+        objectives: [], // long-term objectives across days
+        lastRunAt: null, // epoch ms of the previously tracked moment
+    };
+}
+
+export function getStateRoot() {
+    const st = getContext();
+    if (!st?.chatMetadata) return null;
+    if (!st.chatMetadata[STATE_KEY]) {
+        st.chatMetadata[STATE_KEY] = defaultRoot();
+    }
+    const root = st.chatMetadata[STATE_KEY];
+    // Defensive migration for fields added later.
+    if (typeof root.anchored !== "boolean") root.anchored = false;
+    if (!root.participants || typeof root.participants !== "object") root.participants = {};
+    if (!root.schedules || typeof root.schedules !== "object") root.schedules = {};
+    if (!Array.isArray(root.objectives)) root.objectives = [];
+    return root;
+}
+
+export function saveState() {
+    const st = getContext();
+    if (typeof st?.saveMetadataDebounced === "function") {
+        st.saveMetadataDebounced();
+    } else if (typeof st?.saveChat === "function") {
+        st.saveChat();
+    }
+}
+
+export function resetState() {
+    const st = getContext();
+    if (st?.chatMetadata && STATE_KEY in st.chatMetadata) {
+        delete st.chatMetadata[STATE_KEY];
+        saveState();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Participants
+// ---------------------------------------------------------------------------
+
+export function getParticipants() {
+    return getStateRoot()?.participants || {};
+}
+
+export function getOrCreateParticipant(ownerId, displayName = null) {
+    const root = getStateRoot();
+    if (!root) return null;
+    const id = resolveOwnerId(ownerId);
+    let p = root.participants[id];
+    if (!p) {
+        p = { name: displayName || (id === "user" ? "User" : id), activity: "" };
+        root.participants[id] = p;
+    } else if (displayName && p.name !== displayName && p.name === id) {
+        p.name = displayName; // upgrade placeholder names
+    }
+    return p;
+}
+
+export function removeParticipant(ownerId) {
+    const root = getStateRoot();
+    if (!root) return;
+    const id = resolveOwnerId(ownerId);
+    delete root.participants[id];
+    delete root.schedules[id];
+    saveState();
+}
+
+// ---------------------------------------------------------------------------
+// Clock
+// ---------------------------------------------------------------------------
+
+export function getClock() {
+    return getStateRoot()?.clock || null;
+}
+
+export function setClock(date, time) {
+    const root = getStateRoot();
+    if (!root) return null;
+    root.clock = { date: String(date).trim(), time: String(time).trim() };
+    root.anchored = true;
+    saveState();
+    return root.clock;
+}
+
+// Deterministic fallback when the LLM reports no <clock_update>:
+// simply push the stored clock forward by `ms`.
+export function tickClock(ms) {
+    const root = getStateRoot();
+    if (!root?.clock) return null;
+    root.clock = advanceClock(root.clock, ms);
+    saveState();
+    return root.clock;
+}
+
+// ---------------------------------------------------------------------------
+// Schedules (per participant, per date)
+// ---------------------------------------------------------------------------
+
+export function getSchedules() {
+    return getStateRoot()?.schedules || {};
+}
+
+// entries: [{time, activity}] sorted by parsed time-of-day.
+export function replaceSchedule(ownerId, dateStr, entries) {
+    const root = getStateRoot();
+    if (!root) return;
+    const id = resolveOwnerId(ownerId);
+    if (!isValidDateString(dateStr)) return;
+    const clean = (Array.isArray(entries) ? entries : [])
+        .map(e => ({ time: String(e.time || "").trim(), activity: String(e.activity || "").trim() }))
+        .filter(e => e.time && e.activity)
+        .sort((a, b) => (parseTimeHM(a.time) ?? 0) - (parseTimeHM(b.time) ?? 0));
+    root.schedules[id] = root.schedules[id] || {};
+    root.schedules[id][dateStr.trim()] = clean;
+    saveState();
+}
+
+// Schedule entries for an owner on a date.
+export function getScheduleFor(ownerId, dateStr) {
+    return getSchedules()[resolveOwnerId(ownerId)]?.[String(dateStr)] || [];
+}
+
+// Keeps only the newest `keepCount` dates per owner so old plans don't pile up.
+export function pruneSchedules(keepCount = 2) {
+    const root = getStateRoot();
+    if (!root) return;
+    for (const owner of Object.keys(root.schedules)) {
+        const dates = Object.keys(root.schedules[owner]);
+        if (dates.length <= keepCount) continue;
+        dates.sort((a, b) => (parseDateMDY(a)?.getTime() ?? 0) - (parseDateMDY(b)?.getTime() ?? 0));
+        for (const stale of dates.slice(0, dates.length - keepCount)) {
+            delete root.schedules[owner][stale];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Objectives
+// ---------------------------------------------------------------------------
+
+export function getObjectives() {
+    return getStateRoot()?.objectives || [];
+}
+
+export function findObjectiveByTitleAny(title) {
+    const needle = String(title || "").toLowerCase().trim();
+    return getObjectives().find(o => o.title.toLowerCase().trim() === needle) || null;
+}
+
+export function findObjective(ownerId, title) {
+    const id = resolveOwnerId(ownerId);
+    const needle = String(title || "").toLowerCase().trim();
+    return getObjectives().find(o => o.owner === id && o.title.toLowerCase().trim() === needle) || null;
+}
+
+export function addObjective({ owner, title, description = "", deadline = "", steps = "" }) {
+    const root = getStateRoot();
+    if (!root) return null;
+    const id = resolveOwnerId(owner);
+    const existing = findObjective(id, title);
+    if (existing) return existing; // never duplicate
+    const obj = {
+        id: `obj_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e4).toString(36)}`,
+        owner: id,
+        title: String(title || "Untitled").trim(),
+        description: String(description || "").trim(),
+        deadline: String(deadline || "").trim(),
+        steps: String(steps || "").trim(),
+        progress: "",
+        status: "active", // active | completed | abandoned
+        createdDate: root.clock?.date || "",
+    };
+    root.objectives.push(obj);
+    saveState();
+    return obj;
+}
+
+export function updateObjective(ownerId, title, { progress, deadline } = {}) {
+    // ownerId null = match by title across all owners.
+    const obj = ownerId === null ? findObjectiveByTitleAny(title) : findObjective(ownerId, title);
+    if (!obj) return null;
+    if (progress !== undefined && progress !== null && progress !== "") obj.progress = String(progress).trim();
+    if (deadline !== undefined && deadline !== null && deadline !== "") obj.deadline = String(deadline).trim();
+    saveState();
+    return obj;
+}
+
+export function setObjectiveStatus(ownerId, title, status) {
+    const obj = ownerId === null ? findObjectiveByTitleAny(title) : findObjective(ownerId, title);
+    if (!obj) return null;
+    obj.status = status === "completed" ? "completed" : status === "abandoned" ? "abandoned" : "active";
+    saveState();
+    return obj;
+}
+
+export function setObjectiveStatusById(objId, status) {
+    const obj = getObjectives().find(o => o.id === objId);
+    if (!obj) return null;
+    obj.status = status;
+    saveState();
+    return obj;
+}
+
+export function removeObjectiveById(objId) {
+    const root = getStateRoot();
+    if (!root) return false;
+    const before = root.objectives.length;
+    root.objectives = root.objectives.filter(o => o.id !== objId);
+    if (root.objectives.length !== before) {
+        saveState();
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// Snapshots (swipe / delete recovery, mirrors Persist's approach)
+// ---------------------------------------------------------------------------
+
+export function createSnapshot() {
+    const root = getStateRoot();
+    if (!root) return null;
+    return JSON.parse(JSON.stringify({
+        anchored: root.anchored,
+        clock: root.clock,
+        participants: root.participants,
+        schedules: root.schedules,
+        objectives: root.objectives,
+        lastRunAt: root.lastRunAt,
+    }));
+}
+
+export function restoreSnapshot(snapshot) {
+    const st = getContext();
+    if (!st?.chatMetadata) return;
+    if (!snapshot) {
+        st.chatMetadata[STATE_KEY] = defaultRoot();
+        saveState();
+        return;
+    }
+    const current = getStateRoot();
+    current.anchored = snapshot.anchored === true;
+    current.clock = snapshot.clock || null;
+    current.participants = snapshot.participants || {};
+    current.schedules = snapshot.schedules || {};
+    current.objectives = Array.isArray(snapshot.objectives) ? snapshot.objectives : [];
+    current.lastRunAt = snapshot.lastRunAt ?? null;
+    saveState();
+}
+
+
+
+
