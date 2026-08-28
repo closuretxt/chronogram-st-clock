@@ -67,6 +67,11 @@ jQuery(async () => {
             const msg = st.chat?.[messageId];
             if (!msg || msg.is_user) return false;
             if (msg.is_system === true || msg.is_system === "true") return false;
+            if (msg.is_hidden === true || msg.is_hidden === "true") return false;
+            // Empty AI responses have nothing to track: never fire on them.
+            // (Without this, runTracker's walk-back would skip the empty
+            // message and re-process the previous, older message instead.)
+            if (!String(msg.mes ?? "").trim()) return false;
             const interval = Math.max(1, parseInt(settings.autoRunInterval, 10) || 1);
             return interval <= 1 || Math.floor(messageId / 2) % interval === 0;
         };

@@ -486,6 +486,18 @@ export async function runTracker(messageId = null, options = {}) {
         return { skipped: true, reason: "no_exchange" };
     }
 
+    // Auto runs must be anchored to the message that fired the event. If that
+    // message is empty/hidden it is a "ghost", and the walk-back below would
+    // silently skip it and re-process an OLDER message instead - so empty AI
+    // responses ended up triggering the tracker on stale content. Bail out
+    // instead. (Manual runs keep the walk-back: pressing the button with an
+    // empty last message should still track the latest real content.)
+    const triggerMsg = st.chat[startId];
+    if (options.manual !== true && triggerMsg && !triggerMsg.is_user && isGhostMessage(triggerMsg)) {
+        logDebug(`Message ${startId} is empty/hidden; skipping auto run.`);
+        return { skipped: true, reason: "empty_message" };
+    }
+
     // Walk backwards to the most recent VALID target (a non-ghost AI message).
     let effectiveMessageId = -1;
     for (let i = startId; i > 0; i--) {
