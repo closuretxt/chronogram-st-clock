@@ -219,7 +219,7 @@ function buildContextHeader(elapsedText, mode) {
 // was already tracked (the world clock reflects its end), so the model can
 // compare it against the NEW, untracked exchange and judge the delta instead
 // of guessing.
-const LAST_TRACKED_INTRO = "For reference only: this is the PREVIOUS exchange, which was ALREADY tracked - the world clock in <chronogram_state> stands right after it ended. The exchange in <exchanges_to_analyze> below is NEW and NOT yet tracked. Measure the time delta by comparing the two: the clock only advances by what happens in the new one.";
+const LAST_TRACKED_INTRO = "For reference only: this is the PREVIOUS exchange, which was ALREADY tracked - the world clock in <chronogram_state> stands right after it ended. The exchange in <last_turn> below is NEW and NOT yet tracked. Measure the time delta by comparing the two: the clock only advances by what happens in <last_turn>.";
 
 function buildContextBlock(elapsedText, mode) {
     const { history, previous, target } = getContextMessages();
@@ -241,7 +241,7 @@ function buildContextBlock(elapsedText, mode) {
     }
 
     const targetLines = target.map(messageLine).join("\n\n");
-    lines.push(`<exchanges_to_analyze>\nAnalyze the latest exchange:\n\n${targetLines || "(no messages)"}\n</exchanges_to_analyze>`);
+    lines.push(`<exchanges_to_analyze>\nAnalyze the latest exchange - everything inside <last_turn> is NEW and NOT yet tracked:\n<last_turn>\n${targetLines || "(no messages)"}\n</last_turn>\n</exchanges_to_analyze>`);
 
     return lines.join("\n\n");
 }
@@ -604,13 +604,20 @@ export async function runTracker(messageId = null, options = {}) {
                 }
                 messages.push({ role: "system", content: "</last_tracked_turn>" });
             }
-            for (const m of [...history, ...target]) {
+            for (const m of history) {
                 messages.push({ role: messageRole(m), content: messageLine(m) });
             }
+            // The latest exchange gets its own fence: this is the content the
+            // delta is measured over.
+            messages.push({ role: "system", content: "<last_turn>" });
+            for (const m of target) {
+                messages.push({ role: messageRole(m), content: messageLine(m) });
+            }
+            messages.push({ role: "system", content: "</last_turn>" });
             const header = buildContextHeader(formatElapsed(elapsedMs ?? 0), mode);
             messages.push({
                 role: "user",
-                content: `${header ? header + "\n\n" : ""}<exchanges_to_analyze>\nAnalyze the latest exchange above.\n</exchanges_to_analyze>`,
+                content: `${header ? header + "\n\n" : ""}<exchanges_to_analyze>\nAnalyze the latest exchange above, wrapped in <last_turn> (NEW and NOT yet tracked).\n</exchanges_to_analyze>`,
             });
         } else {
             messages.push({ role: "user", content: substituteParams(buildContextBlock(formatElapsed(elapsedMs ?? 0), mode)) });
