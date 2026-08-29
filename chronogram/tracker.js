@@ -183,8 +183,15 @@ function getContextMessages() {
 
     const visibleChat = st.chat.filter(m => !isGhostMessage(m));
     const targetCount = Math.min(visibleChat.length, interval * 2);
+    // The PREVIOUSLY tracked exchange: the targetCount messages right before
+    // the current target. The world clock currently stands at the END of this
+    // exchange, so it is tagged <last_tracked_turn> in the prompt as the
+    // comparison anchor for the delta (everything after it is new).
+    const previousStart = Math.max(0, visibleChat.length - targetCount * 2);
+    const previous = visibleChat.slice(previousStart, visibleChat.length - targetCount);
     return {
-        history: visibleChat.slice(0, visibleChat.length - targetCount).slice(-depth),
+        history: visibleChat.slice(0, previousStart).slice(-depth),
+        previous,
         target: visibleChat.slice(-targetCount),
     };
 }
@@ -208,8 +215,14 @@ function buildContextHeader(elapsedText, mode) {
         : "";
 }
 
+// Wording for the <last_tracked_turn> tag: marks the PREVIOUS exchange, which
+// was already tracked (the world clock reflects its end), so the model can
+// compare it against the NEW, untracked exchange and judge the delta instead
+// of guessing.
+const LAST_TRACKED_INTRO = "For reference only: this is the PREVIOUS exchange, which was ALREADY tracked - the world clock in <chronogram_state> stands right after it ended. The exchange in <exchanges_to_analyze> below is NEW and NOT yet tracked. Measure the time delta by comparing the two: the clock only advances by what happens in the new one.";
+
 function buildContextBlock(elapsedText, mode) {
-    const { history, target } = getContextMessages();
+    const { history, previous, target } = getContextMessages();
 
     const lines = [];
     const header = buildContextHeader(elapsedText, mode);
@@ -218,6 +231,13 @@ function buildContextBlock(elapsedText, mode) {
     if (history.length > 0) {
         const historyLines = history.map(messageLine).join("\n");
         lines.push(`<conversation_context>\n${historyLines}\n</conversation_context>`);
+    }
+
+    // Only meaningful once the clock exists (normal mode); in setup mode there
+    // is no previously tracked moment to anchor on.
+    if (mode === "normal" && previous.length > 0) {
+        const prevLines = previous.map(messageLine).join("\n\n");
+        lines.push(`<last_tracked_turn>\n${LAST_TRACKED_INTRO}\n\n${prevLines}\n</last_tracked_turn>`);
     }
 
     const targetLines = target.map(messageLine).join("\n\n");
@@ -573,8 +593,17 @@ export async function runTracker(messageId = null, options = {}) {
 
         if (settings.contextAsRoles === true) {
             // "Send Context as Roles": history and the latest exchange go in as
-            // proper user/assistant turns instead of one flat text block.
-            const { history, target } = getContextMessages();
+            // proper user/assistant turns instead of one flat text block. The
+            // previously tracked exchange is fenced between system-role tag
+            // markers so the model still knows where the clock stands.
+            const { history, previous, target } = getContextMessages();
+            if (mode === "normal" && previous.length > 0) {
+                messages.push({ role: "system", content: `<last_tracked_turn>\n${LAST_TRACKED_INTRO}` });
+                for (const m of previous) {
+                    messages.push({ role: messageRole(m), content: messageLine(m) });
+                }
+                messages.push({ role: "system", content: "</last_tracked_turn>" });
+            }
             for (const m of [...history, ...target]) {
                 messages.push({ role: messageRole(m), content: messageLine(m) });
             }
