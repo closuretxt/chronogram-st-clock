@@ -222,7 +222,7 @@ function buildContextHeader(elapsedText, mode) {
 const LAST_TRACKED_INTRO = "For reference only: this is the PREVIOUS exchange, which was ALREADY tracked - the world clock in <chronogram_state> stands right after it ended. The exchange in <last_turn> below is NEW and NOT yet tracked. Measure the time delta by comparing the two: the clock only advances by what happens in <last_turn>.";
 
 function buildContextBlock(elapsedText, mode) {
-    const { history, previous, target } = getContextMessages();
+    const { history, previous } = getContextMessages();
 
     const lines = [];
     const header = buildContextHeader(elapsedText, mode);
@@ -240,10 +240,16 @@ function buildContextBlock(elapsedText, mode) {
         lines.push(`<last_tracked_turn>\n${LAST_TRACKED_INTRO}\n\n${prevLines}\n</last_tracked_turn>`);
     }
 
-    const targetLines = target.map(messageLine).join("\n\n");
-    lines.push(`<exchanges_to_analyze>\nAnalyze the latest exchange - everything inside <last_turn> is NEW and NOT yet tracked:\n<last_turn>\n${targetLines || "(no messages)"}\n</last_turn>\n</exchanges_to_analyze>`);
-
     return lines.join("\n\n");
+}
+
+// The NEW, untracked exchange. Sent as a separate user message AFTER the
+// <chronogram_state> block, so the model reads "here is where the clock
+// stands" first and then the exchange (user + assistant turns) that advances it.
+function buildExchangesBlock() {
+    const { target } = getContextMessages();
+    const targetLines = target.map(messageLine).join("\n\n");
+    return `<exchanges_to_analyze>\nAnalyze the latest exchange - everything inside <last_turn> is NEW and NOT yet tracked:\n<last_turn>\n${targetLines || "(no messages)"}\n</last_turn>\n</exchanges_to_analyze>`;
 }
 
 // Optional story-reference data sent before the state block: user persona,
@@ -578,7 +584,7 @@ export async function runTracker(messageId = null, options = {}) {
         // Assemble the tracker conversation: system prompt, optional story
         // reference info (persona/scenario/char card/WI/outlets), the
         // conversation context (flat block or roles), then the current
-        // tracked state LAST, right before the response.
+        // tracked state, and FINALLY the new exchange to analyze.
         const messages = [
             { role: "system", content: substituteParams(getChronoPrompt(mode, {
                 trackCharacters: settings.trackCharacters !== false,
@@ -607,6 +613,11 @@ export async function runTracker(messageId = null, options = {}) {
             for (const m of history) {
                 messages.push({ role: messageRole(m), content: messageLine(m) });
             }
+            // Current tracked state BEFORE the last exchange, in its own user
+            // message: the model reads where the clock stands (right after the
+            // <last_tracked_turn> exchange), then gets the new exchange
+            // (user + assistant turns) that advances it.
+            messages.push({ role: "user", content: buildCurrentStateBlock() });
             // The latest exchange gets its own fence: this is the content the
             // delta is measured over.
             messages.push({ role: "system", content: "<last_turn>" });
@@ -621,12 +632,11 @@ export async function runTracker(messageId = null, options = {}) {
             });
         } else {
             messages.push({ role: "user", content: substituteParams(buildContextBlock(formatElapsed(elapsedMs ?? 0), mode)) });
+            // Current tracked state BEFORE the last exchange, in its own user
+            // message (see the roles-mode comment above for the rationale).
+            messages.push({ role: "user", content: buildCurrentStateBlock() });
+            messages.push({ role: "user", content: substituteParams(buildExchangesBlock()) });
         }
-
-        // Current tracked state goes LAST, after the full context history and
-        // exchanges, so it sits closest to where the response is generated as
-        // the freshest reference.
-        messages.push({ role: "user", content: buildCurrentStateBlock() });
 
         if (isCancelled) return { skipped: true, reason: "cancelled" };
         const profileId = resolveConnectionProfile(st, settings.trackerProfile || "");
