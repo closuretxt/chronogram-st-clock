@@ -46,6 +46,47 @@ function repairDate(value) {
     return date;
 }
 
+// Sums a DELTA clock update into total minutes. Expected shape:
+// "Days:0 / Hours:2 / Minutes:35" (each optional, tolerates "+1", "02",
+// "1." etc.). Falls back to a combined shorthand line inside the block body
+// like "1d 2h 30m". Returns null when no delta field holds a number.
+function parseDeltaMinutes(fields, rawBody) {
+    const num = (v) => {
+        const m = String(v ?? "").replace(/\u200b/g, "").trim().match(/[+-]?\d+/);
+        return m ? parseInt(m[0], 10) : null;
+    };
+    let total = 0;
+    let found = false;
+    const groups = [
+        [["Days", "Day"], 1440],
+        [["Hours", "Hour"], 60],
+        [["Minutes", "Minute", "Min"], 1],
+    ];
+    for (const [keys, mult] of groups) {
+        for (const k of keys) {
+            if (fields[k] !== undefined) {
+                const n = num(fields[k]);
+                if (n !== null) {
+                    total += n * mult;
+                    found = true;
+                }
+                break;
+            }
+        }
+    }
+    if (found) return total;
+    const body = String(rawBody || "");
+    const dm = body.match(/(\d+)\s*d(?:ay)?s?\b/i);
+    const hm = body.match(/(\d+)\s*h(?:our)?s?\b/i);
+    const mm = body.match(/(\d+)\s*m(?:in)?(?:ute)?s?\b/i);
+    if (dm || hm || mm) {
+        return (dm ? parseInt(dm[1], 10) * 1440 : 0)
+            + (hm ? parseInt(hm[1], 10) * 60 : 0)
+            + (mm ? parseInt(mm[1], 10) : 0);
+    }
+    return null;
+}
+
 // Parses the free lines of a <new_schedule> body into [{time, activity}].
 // Expected shape: "08:00 wakes up" (also tolerates "- 8:00 AM - text").
 function parseScheduleEntries(body) {
@@ -73,6 +114,9 @@ export function hasChronoBlocks(text) {
 // Returns a parsed update object:
 // { clock, schedules[], newObjectives[], updateObjectives[],
 //   completeTitles[{owner,title}], abandonTitles[{owner,title}] }
+// `clock` is either an ABSOLUTE value ({ date, time } - setup run establishing
+// the clock) or a DELTA ({ deltaMinutes } - normal runs: time passed since the
+// clock in <chronogram_state>).
 export function parseChronoResponse(responseText) {
     const text = String(responseText || "");
     const result = {
@@ -89,10 +133,18 @@ export function parseChronoResponse(responseText) {
     CLOCK_RE.lastIndex = 0;
     while ((m = CLOCK_RE.exec(text)) !== null) {
         const f = parseFields(m[1]);
+        // Absolute form (setup runs): Date + Time establish the clock.
         const date = repairDate(f.Date);
         const time = String(f.Time || "").trim();
         if (parseDateMDY(date) && parseTimeHM(time) !== null) {
             result.clock = { date, time };
+            continue;
+        }
+        // Delta form (normal runs): Days/Hours/Minutes that PASSED since the
+        // state clock. Negative amounts are clamped to zero downstream.
+        const deltaMinutes = parseDeltaMinutes(f, m[1]);
+        if (deltaMinutes !== null) {
+            result.clock = { deltaMinutes: Math.max(0, deltaMinutes) };
         }
     }
 

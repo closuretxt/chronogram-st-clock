@@ -22,6 +22,7 @@ import {
     getClock,
     setClock,
     tickClock,
+    advanceClock,
     getOrCreateParticipant,
     getParticipants,
     getActiveParticipants,
@@ -372,10 +373,23 @@ function applyUpdate(update, elapsedMs) {
     };
 
     // 1. Clock. LLM is authoritative; deterministic tick is the fallback.
+    // Normal runs report a DELTA (time passed since the state clock); setup
+    // runs (and any absolute leftover) carry Date/Time directly.
     if (update.clock) {
-        setClock(update.clock.date, update.clock.time);
-        event.newDate = update.clock.date;
-        event.newTime = update.clock.time;
+        if (update.clock.date && update.clock.time) {
+            setClock(update.clock.date, update.clock.time);
+            event.newDate = update.clock.date;
+            event.newTime = update.clock.time;
+        } else if (beforeClock && Number.isFinite(update.clock.deltaMinutes)) {
+            const advanced = advanceClock(beforeClock, update.clock.deltaMinutes * 60000);
+            setClock(advanced.date, advanced.time);
+            event.newDate = advanced.date;
+            event.newTime = advanced.time;
+        } else if (elapsedMs !== null) {
+            const ticked = tickClock(elapsedMs);
+            event.newDate = ticked?.date ?? null;
+            event.newTime = ticked?.time ?? null;
+        }
     } else if (elapsedMs !== null) {
         const ticked = tickClock(elapsedMs);
         event.newDate = ticked?.date ?? null;
