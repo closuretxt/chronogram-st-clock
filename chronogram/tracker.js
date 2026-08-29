@@ -793,10 +793,23 @@ export function clearMessageSnapshot(messageId) {
 
 export function restoreStateUpTo(messageId) {
     const st = getST();
+    // The restored snapshot carries the lastRunAt of the run that CREATED it,
+    // which can be much older than the most recent actual tracking event.
+    // Example (swipe): snapshot@N-2 was written at T1, the pre-swipe run on N
+    // re-anchored lastRunAt to T2 > T1; rolling back restores the T1 stamp.
+    // The next run would then compute "Time Passed" as now - T1 - inflated by
+    // the whole lifetime of the DISCARDED run - and jump the clock forward.
+    // Keeping the newer stamp keeps the elapsed-time hint honest.
+    const currentLastRunAt = getStateRoot()?.lastRunAt ?? null;
     for (let i = messageId; i >= 0; i--) {
         const snap = st.chat?.[i]?.extra?.chrono_snapshot;
         if (snap) {
             restoreSnapshot(snap);
+            const root = getStateRoot();
+            if (currentLastRunAt !== null && currentLastRunAt > (root?.lastRunAt ?? 0)) {
+                root.lastRunAt = currentLastRunAt;
+                saveState();
+            }
             return true;
         }
     }
