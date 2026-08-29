@@ -20,13 +20,16 @@ Exactly ONE per run. This first run ESTABLISHES the world clock: write CONCRETE 
 // NORMAL runs: deltas only. The clock in <chronogram_state> is authoritative;
 // the tracker reports how much time PASSED since it, never a new absolute
 // value. This removes the copy-the-example / drift-backward failure modes of
-// absolute clock emission.
+// absolute clock emission. The example deliberately shows the COMMON case
+// (single minutes) - models anchor on the example, so it must never suggest
+// hours for a plain conversation.
 const OUTPUT_CLOCK_DELTA = `<clock_update>
 Days:0
-Hours:2
-Minutes:35
+Hours:0
+Minutes:1
 </clock_update>
-Exactly ONE per run. NEVER write Date: or Time: here. Report how much time PASSED since the clock shown in <chronogram_state>: whole Days, plus the remaining Hours and Minutes (24h clock). Use 0 for fields that did not advance; an all-zero delta means "no time passed". Decide the amount from what actually happened in the scene: single minute if seamless, hours or days if the story moved.`;
+Exactly ONE per run. NEVER write Date: or Time: here. Report how much time PASSED since the clock shown in <chronogram_state>: whole Days, plus the remaining Hours and Minutes (24h clock). Use 0 for fields that did not advance; an all-zero delta is valid.
+SCALE - MINUTES ARE THE DEFAULT: a normal exchange of dialogue and small actions takes 1-5 MINUTES total. Use Hours ONLY when the text explicitly skips time (travel, training, waiting, a scene break) and Days ONLY for an explicit day transition (sleeping, "the next morning"). Never jump hours just because a scene felt eventful: if nothing in the text says time passed, only minutes did.`;
 
 const OUTPUT_SCHEDULE = `One <new_schedule> per character PRESENT in the latest exchange (plus {{user}} as "User"), ONLY when the clock crosses into a NEW calendar date. Characters absent from the exchange are off-screen: skip them entirely (they rejoin automatically when they return).
 <new_schedule>
@@ -76,7 +79,7 @@ const INPUT_STRUCTURE = `## INPUT
 Each request arrives as: (1) this instruction, (2) optional <story_info> reference data, (3) the conversation context (<conversation_context> or role turns) ending with the <exchanges_to_analyze> block, and (4) as the VERY LAST message, <chronogram_state>: the current tracked state (world clock, PRESENT characters' schedules, objectives). Treat <chronogram_state> as the authoritative starting point to advance from.`;
 
 const NORMAL_RULES = `## TRACKING
-Using Time Passed and what happened, decide how much story time passes and emit it as the clock_update delta (Days/Hours/Minutes). When the delta crosses into a NEW calendar date, generate schedules - a new schedule's Date: is the NEW date AFTER the advance. Maintain objectives. A quiet continuation still emits clock_update (it may be all zeros). Leave off-screen characters untouched.`;
+Using Time Passed and what happened, decide how much story time passes and emit it as the clock_update delta (Days/Hours/Minutes). DEFAULT TO MINUTES: a normal exchange is 1-5 minutes; Hours only for an explicit time skip (travel, sleep, waiting, scene break), Days only for an explicit day transition. When the delta crosses into a NEW calendar date, generate schedules - a new schedule's Date: is the NEW date AFTER the advance. Maintain objectives. A quiet continuation still emits clock_update (it may be all zeros). Leave off-screen characters untouched.`;
 
 export function getChronoPrompt(mode, { trackCharacters = true, trackObjectives = true } = {}) {
     const header = `Silent bookkeeper for this roleplay. You never write story content or commentary. You maintain the world clock, the daily chronograms of PRESENT characters, and long-term objectives for {{user}} ("User") and the characters.`;
