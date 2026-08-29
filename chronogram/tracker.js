@@ -29,7 +29,6 @@ import {
     replaceSchedule,
     pruneSchedules,
     getScheduleFor,
-    getSchedules,
     addObjective,
     updateObjective,
     setObjectiveStatus,
@@ -127,15 +126,11 @@ function buildCurrentStateBlock() {
             lines.push("Participants (PRESENT characters only - today's plan):");
             for (const [id, p] of entries) {
                 lines.push(`<participant name="${id}">`);
-                // Previous tracker info: plans kept from earlier dates are sent
-                // too, so a midnight crossing doesn't start from a blank page.
-                const allScheds = getSchedules()[id] || {};
-                for (const d of Object.keys(allScheds).filter(d => d !== clock?.date).sort()) {
-                    const prev = allScheds[d] || [];
-                    if (prev.length > 0) {
-                        lines.push(`Previous plan (${d}): ${prev.map(e => `${e.time} ${stripCurrentMarker(e.activity)}`).join("; ")}`);
-                    }
-                }
+                // ONLY today's plan (matching the current clock date) is injected.
+                // Plans stored for other dates stay in state but are NEVER sent:
+                // after a rollback or manual clock edit they desync from the world
+                // clock and would inject a second, conflicting date/time into the
+                // prompt (e.g. clock = 04/12 next to a "plan for 04/13").
                 if (clock?.date) {
                     const sched = getScheduleFor(id, clock.date);
                     if (sched.length > 0) {
