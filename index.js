@@ -10,6 +10,7 @@ export { loadSettings, saveSettings, defaultSettings };
 
 // Tracker
 import { runTracker, runTrackerManual, resetTrackerGuard, cancelTracker, rollbackToBeforeMessage, restoreStateUpTo } from "./chronogram/tracker.js";
+import { isTimeLocked } from "./chronogram/state.js";
 import { registerInjectionMacro, initPanelHandlers, refreshChronoPanel, resetChatData } from "./chronogram/injection.js";
 // UI
 import { initPopupWindow, toggleChronoWindow } from "./ui/popupWindow.js";
@@ -64,6 +65,8 @@ jQuery(async () => {
         const shouldAutoRun = (messageId) => {
             const settings = extension_settings[extensionName];
             if (!settings?.enabled || !settings.autorun) return false;
+            // Locked clock: skip all automatic tracker requests until unlocked.
+            if (isTimeLocked()) return false;
             const msg = st.chat?.[messageId];
             if (!msg || msg.is_user) return false;
             if (msg.is_system === true || msg.is_system === "true") return false;

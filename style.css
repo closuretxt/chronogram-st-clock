@@ -93,6 +93,13 @@
     font-weight: bold;
 }
 
+/* Locked clock: highlight the lock button while time is frozen */
+#chrono_clock_lock.chrono-lock-active {
+    border-color: rgba(255, 200, 60, 0.65);
+    background: rgba(255, 200, 60, 0.15);
+    color: #ffd76e;
+}
+
 /* ---------- Section headers ---------- */
 .chrono-section-header {
     display: flex;

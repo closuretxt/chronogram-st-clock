@@ -21,6 +21,8 @@ import {
     parseTimeHM,
     parseDateMDY,
     stripCurrentMarker,
+    isTimeLocked,
+    setTimeLocked,
 } from "./state.js";
 import { DEFAULT_INJECTION_INTRO } from "../settings/defaultInjection.js";
 import { updateLatestSnapshot, clearAllSnapshots } from "./tracker.js";
@@ -328,6 +330,7 @@ export function renderPanelHTML() {
                 <input type="text" id="chrono_clock_date" class="text_pole" value="${escapeHtml(clock?.date ?? "")}" placeholder="MM/DD/YYYY" maxlength="10" style="width:110px;">
                 <input type="text" id="chrono_clock_time" class="text_pole" value="${escapeHtml(clock?.time ?? "")}" placeholder="HH:MM" maxlength="5" style="width:70px;">
                 <button id="chrono_clock_save" class="menu_button menu_button_icon" title="Save the clock manually"><i class="fa-solid fa-floppy-disk"></i></button>
+                <button id="chrono_clock_lock" class="menu_button menu_button_icon${isTimeLocked() ? " chrono-lock-active" : ""}" title="${isTimeLocked() ? "Unlock time: allow automatic tracker runs again" : "Lock time: skip all future automatic tracker runs"}"><i class="fa-solid fa-${isTimeLocked() ? "lock" : "lock-open"}"></i></button>
             </div>
         </div>${userHtml}${charactersHtml}${objectivesHtml}`;
 }
@@ -368,6 +371,12 @@ function bindPanelHandlers() {
         // Sync the newest snapshot, otherwise the next swipe/manual re-run
         // would restore the pre-edit clock and discard this change.
         updateLatestSnapshot();
+        refreshChronoPanel();
+    });
+
+    // Lock/unlock the clock: locked = every automatic tracker run is skipped.
+    $doc.on("click", "#chrono_clock_lock", () => {
+        setTimeLocked(!isTimeLocked());
         refreshChronoPanel();
     });
 

@@ -145,6 +145,7 @@ function defaultRoot() {
         schedules: {}, // ownerId -> { [dateStr]: [{ time, activity }] }
         objectives: [], // long-term objectives across days
         lastRunAt: null, // epoch ms of the previously tracked moment
+        timeLocked: false, // true = freeze the clock, skip all automatic runs
     };
 }
 
@@ -157,6 +158,7 @@ export function getStateRoot() {
     const root = st.chatMetadata[STATE_KEY];
     // Defensive migration for fields added later.
     if (typeof root.anchored !== "boolean") root.anchored = false;
+    if (typeof root.timeLocked !== "boolean") root.timeLocked = false;
     if (!root.participants || typeof root.participants !== "object") root.participants = {};
     if (!root.schedules || typeof root.schedules !== "object") root.schedules = {};
     if (!Array.isArray(root.objectives)) root.objectives = [];
@@ -352,6 +354,20 @@ export function setClock(date, time) {
     return root.clock;
 }
 
+// Clock lock: when set, every automatic tracker run is skipped entirely so
+// the world time stays exactly where the user left it (panel lock button).
+export function isTimeLocked() {
+    return getStateRoot()?.timeLocked === true;
+}
+
+export function setTimeLocked(locked) {
+    const root = getStateRoot();
+    if (!root) return false;
+    root.timeLocked = locked === true;
+    saveState();
+    return root.timeLocked;
+}
+
 // Deterministic fallback when the LLM reports no <clock_update>:
 // simply push the stored clock forward by `ms`.
 export function tickClock(ms) {
@@ -506,6 +522,7 @@ export function createSnapshot() {
         schedules: root.schedules,
         objectives: root.objectives,
         lastRunAt: root.lastRunAt,
+        timeLocked: root.timeLocked,
     }));
 }
 
@@ -524,6 +541,7 @@ export function restoreSnapshot(snapshot) {
     current.schedules = snapshot.schedules || {};
     current.objectives = Array.isArray(snapshot.objectives) ? snapshot.objectives : [];
     current.lastRunAt = snapshot.lastRunAt ?? null;
+    current.timeLocked = snapshot.timeLocked === true;
     saveState();
 }
 
