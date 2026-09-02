@@ -11,10 +11,10 @@ export const defaultSettings = {
     showProgressBar: false, // Show the floating progress bar while the tracker runs
     autoRunInterval: 1, // Run every X turns (a turn = one user+AI exchange)
     delayTrigger: 0, // Seconds to wait before sending the tracker request
-    contextDepth: 10, // How many past messages are sent to the tracker FOR CONTEXT ONLY
+    contextDepth: 2, // How many past messages are sent to the tracker FOR CONTEXT ONLY
     minMessageLength: 50, // Skip tracker runs on very short AI messages
-    minMinutesPerTurn: 10, // Floor for story-time advance between two runs
-    maxAdvanceHours: 24, // Cap on story-time advance per single run (anti-idle-jump guard)
+    minMinutesPerTurn: 1, // Floor for story-time advance between two runs
+    maxAdvanceHours: 48, // Cap on story-time advance per single run (anti-idle-jump guard)
     injectFormat: "full", // "full" = wrapped with explanation; "raw" = bare block; "none" = not injected
     notificationLevel: "reduced", // "all" | "reduced" | "none"
     trackerProfile: "", // Connection Manager profile id used for the tracker LLM ("" = same as current)

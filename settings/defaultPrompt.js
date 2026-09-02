@@ -72,14 +72,17 @@ const SETUP_RULES = `## SETUP (first run of this chat)
 Infer the current in-fiction date/time from the story so far (default mid-day 12:00) and emit its clock_update. Establish every character present in the opening scene plus "User" with a full schedule for today each. Add any objective genuinely grounded in the fiction - or none.`;
 
 // Describes how each request is laid out so the model knows where to look.
-// The <chronogram_state> block comes right BEFORE the last exchange: it
-// freezes "where the world stands" at the end of <last_tracked_turn>, and the
-// exchange that follows is what advances it.
+// The request is split into three explicit regions - CONTEXT (reference
+// only), FROM (the already-tracked anchor) and TO (the new exchange) - so
+// the model never blends older history into the delta it must report.
 const INPUT_STRUCTURE = `## INPUT
-Each request arrives as: (1) this instruction, (2) optional <story_info> reference data, (3) the conversation context (<conversation_context> or role turns) containing a <last_tracked_turn> block (the PREVIOUS exchange, ALREADY tracked - the world clock stands at its end) followed by the <chronogram_state> block (the current tracked state, describing the world at that moment), and (4) as the VERY LAST message, the <exchanges_to_analyze> block wrapping <last_turn>: the NEW exchange, NOT yet tracked - this is what you analyze and what advances the clock. Advance from the state in <chronogram_state> based on what happens in <last_turn>.`;
+Each request is split into three clearly separated regions:
+1. CONTEXT - this instruction, optional <story_info> reference data, then <conversation_context> (older history, REFERENCE ONLY) and the <last_tracked_turn> block: the FROM anchor, the PREVIOUS exchange, ALREADY tracked. The <chronogram_state> block follows it and describes the world (clock, schedules, objectives) at the END of that FROM exchange.
+2. TO - as the VERY LAST message, the <exchanges_to_analyze> block wrapping <last_turn>: the NEW exchange, NOT yet tracked. This is the ONLY exchange you analyze and the ONLY source of story time.
+3. A "REAL-WORLD time passed between tracker runs" note, when present, is metadata about request timing - NEVER story time and never a delta to report. Advance from the state in <chronogram_state> based ONLY on what happens in <last_turn>.`;
 
 const NORMAL_RULES = `## TRACKING
-Using Time Passed and what happened, decide how much story time passes and emit it as the clock_update delta (Days/Hours/Minutes). Measure the delta from the END of <last_tracked_turn> (where the clock stands) to the END of <last_turn>: only what happens inside <last_turn> adds time. DEFAULT TO MINUTES: a normal exchange is 1-5 minutes; Hours only for an explicit time skip (travel, sleep, waiting, scene break), Days only for an explicit day transition. When the delta crosses into a NEW calendar date, generate schedules - a new schedule's Date: is the NEW date AFTER the advance. Maintain objectives. A quiet continuation still emits clock_update (it may be all zeros). Leave off-screen characters untouched.`;
+Compare FROM to TO: the clock stands at the END of <last_tracked_turn> (as shown in <chronogram_state>); measure ONLY what happens inside <last_turn> and emit it as the clock_update delta (Days/Hours/Minutes). IGNORE any real-world timing note and never count earlier turns or context history as elapsed story time. DEFAULT TO MINUTES: a normal exchange is 1-5 minutes; Hours only for an explicit time skip (travel, sleep, waiting, scene break), Days only for an explicit day transition. When the delta crosses into a NEW calendar date, generate schedules - a new schedule's Date: is the NEW date AFTER the advance. Maintain objectives. A quiet continuation still emits clock_update (it may be all zeros). Leave off-screen characters untouched.`;
 
 export function getChronoPrompt(mode, { trackCharacters = true, trackObjectives = true } = {}) {
     const header = `Silent bookkeeper for this roleplay. You never write story content or commentary. You maintain the world clock, the daily chronograms of PRESENT characters, and long-term objectives for {{user}} ("User") and the characters.`;

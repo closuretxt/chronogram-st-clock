@@ -171,7 +171,9 @@ function buildCurrentStateBlock() {
     return lines.join("\n");
 }
 
-// History context + the exchanges to analyze, with the elapsed-time header.
+// History context + the exchanges to analyze, split into three explicit
+// regions: CONTEXT (reference only), FROM (<last_tracked_turn> + state) and
+// TO (<last_turn>, the only exchange that advances the clock).
 
 // Shared message-set extraction so both context modes (flat block / roles)
 // see exactly the same history and target messages.
@@ -205,36 +207,38 @@ function messageRole(m) {
     return m.is_user ? "user" : "assistant";
 }
 
-// The elapsed/setup header lines that precede the conversation data.
+// The header line that accompanies the exchange to analyze. Setup announces
+// the first run; normal runs report the REAL-WORLD time between runs - kept
+// next to <last_turn> and explicitly framed as metadata so the model can't
+// mistake it for story time belonging to earlier turns (which produced
+// nonsensical timeskips for the previous exchanges).
 function buildContextHeader(elapsedText, mode) {
     if (mode === "setup") {
         return "This is the FIRST Chronogram run for this chat: establish the clock, participants and schedules (see SETUP mode in your instructions).";
     }
     return elapsedText
-        ? `Time Passed since the previously tracked moment: ${elapsedText}`
+        ? `Note: ${elapsedText} of REAL-WORLD time passed between tracker runs (NOT story time - never report it as a delta). The story-time delta comes ONLY from the events in <last_turn>.`
         : "";
 }
 
-// Wording for the <last_tracked_turn> tag: marks the PREVIOUS exchange, which
-// was already tracked (the world clock reflects its end), so the model can
-// compare it against the NEW, untracked exchange and judge the delta instead
-// of guessing.
-const LAST_TRACKED_INTRO = "For reference only: this is the PREVIOUS exchange, which was ALREADY tracked - the world clock in <chronogram_state> stands right after it ended. The exchange in <last_turn> below is NEW and NOT yet tracked. Measure the time delta by comparing the two: the clock only advances by what happens in <last_turn>.";
+// Wording for the <last_tracked_turn> tag: the FROM anchor - the PREVIOUS
+// exchange, which was already tracked (the world clock reflects its end), so
+// the model compares FROM to TO and judges the delta instead of guessing.
+const LAST_TRACKED_INTRO = "FROM (already tracked): the PREVIOUS exchange below was ALREADY tracked - the world clock in <chronogram_state> stands right after it ended. Reference only: never advance the clock for anything here. The exchange in <last_turn> is the TO anchor: NEW and NOT yet tracked.";
 
-function buildContextBlock(elapsedText, mode) {
+// CONTEXT region: older history (reference only) + the FROM anchor. Only
+// meaningful once the clock exists (normal mode); in setup mode there is no
+// previously tracked moment to anchor on.
+function buildContextBlock(mode) {
     const { history, previous } = getContextMessages();
 
     const lines = [];
-    const header = buildContextHeader(elapsedText, mode);
-    if (header) lines.push(header);
 
     if (history.length > 0) {
         const historyLines = history.map(messageLine).join("\n");
-        lines.push(`<conversation_context>\n${historyLines}\n</conversation_context>`);
+        lines.push(`<conversation_context>\nReference only - older history, already accounted for by previous runs:\n${historyLines}\n</conversation_context>`);
     }
 
-    // Only meaningful once the clock exists (normal mode); in setup mode there
-    // is no previously tracked moment to anchor on.
     if (mode === "normal" && previous.length > 0) {
         const prevLines = previous.map(messageLine).join("\n\n");
         lines.push(`<last_tracked_turn>\n${LAST_TRACKED_INTRO}\n\n${prevLines}\n</last_tracked_turn>`);
@@ -243,13 +247,20 @@ function buildContextBlock(elapsedText, mode) {
     return lines.join("\n\n");
 }
 
-// The NEW, untracked exchange. Sent as a separate user message AFTER the
-// <chronogram_state> block, so the model reads "here is where the clock
-// stands" first and then the exchange (user + assistant turns) that advances it.
-function buildExchangesBlock() {
+// The TO anchor: the NEW, untracked exchange. Sent as a separate user message
+// AFTER the <chronogram_state> block, so the model reads "here is where the
+// clock stands" first and then the exchange (user + assistant turns) that
+// advances it. The elapsed-time note rides along HERE (not on the context
+// block) so it sits exactly where the delta is judged.
+function buildExchangesBlock(elapsedText, mode) {
     const { target } = getContextMessages();
     const targetLines = target.map(messageLine).join("\n\n");
-    return `<exchanges_to_analyze>\nAnalyze the latest exchange - everything inside <last_turn> is NEW and NOT yet tracked:\n<last_turn>\n${targetLines || "(no messages)"}\n</last_turn>\n</exchanges_to_analyze>`;
+
+    const lines = [];
+    const header = buildContextHeader(elapsedText, mode);
+    if (header) lines.push(header);
+    lines.push(`<exchanges_to_analyze>\nTO (analyze this): everything inside <last_turn> is NEW and NOT yet tracked - the ONLY exchange that advances the clock:\n<last_turn>\n${targetLines || "(no messages)"}\n</last_turn>\n</exchanges_to_analyze>`);
+    return lines.join("\n\n");
 }
 
 // Optional story-reference data sent before the state block: user persona,
@@ -581,10 +592,10 @@ export async function runTracker(messageId = null, options = {}) {
         pipelineBar.start(1, String(st.chat[effectiveMessageId]?.mes ?? ""));
         pipelineBar.updatePass(0, "Tracking chronogram");
 
-        // Assemble the tracker conversation: system prompt, optional story
-        // reference info (persona/scenario/char card/WI/outlets), the
-        // conversation context (flat block or roles), then the current
-        // tracked state, and FINALLY the new exchange to analyze.
+        // Assemble the tracker conversation in three explicit regions:
+        // CONTEXT (system prompt + story info + older history + the FROM
+        // anchor), the FROM state (<chronogram_state>), and finally the TO
+        // anchor - the new exchange to analyze.
         const messages = [
             { role: "system", content: substituteParams(getChronoPrompt(mode, {
                 trackCharacters: settings.trackCharacters !== false,
@@ -599,21 +610,23 @@ export async function runTracker(messageId = null, options = {}) {
 
         if (settings.contextAsRoles === true) {
             // "Send Context as Roles": history and the latest exchange go in as
-            // proper user/assistant turns instead of one flat text block. The
-            // previously tracked exchange is fenced between system-role tag
-            // markers so the model still knows where the clock stands.
+            // proper user/assistant turns instead of one flat text block.
+            // Order mirrors the flat mode: older history FIRST (context),
+            // then the FROM anchor, the state, and finally the TO anchor.
             const { history, previous, target } = getContextMessages();
+            for (const m of history) {
+                messages.push({ role: messageRole(m), content: messageLine(m) });
+            }
             if (mode === "normal" && previous.length > 0) {
+                // FROM anchor: fenced between system-role tag markers so the
+                // model knows where the clock stands.
                 messages.push({ role: "system", content: `<last_tracked_turn>\n${LAST_TRACKED_INTRO}` });
                 for (const m of previous) {
                     messages.push({ role: messageRole(m), content: messageLine(m) });
                 }
                 messages.push({ role: "system", content: "</last_tracked_turn>" });
             }
-            for (const m of history) {
-                messages.push({ role: messageRole(m), content: messageLine(m) });
-            }
-            // Current tracked state BEFORE the last exchange, in its own user
+            // Current tracked state AFTER the FROM anchor, in its own user
             // message: the model reads where the clock stands (right after the
             // <last_tracked_turn> exchange), then gets the new exchange
             // (user + assistant turns) that advances it.
@@ -628,14 +641,14 @@ export async function runTracker(messageId = null, options = {}) {
             const header = buildContextHeader(formatElapsed(elapsedMs ?? 0), mode);
             messages.push({
                 role: "user",
-                content: `${header ? header + "\n\n" : ""}<exchanges_to_analyze>\nAnalyze the latest exchange above, wrapped in <last_turn> (NEW and NOT yet tracked).\n</exchanges_to_analyze>`,
+                content: `${header ? header + "\n\n" : ""}<exchanges_to_analyze>\nTO (analyze this): the exchange above, wrapped in <last_turn>, is NEW and NOT yet tracked.\n</exchanges_to_analyze>`,
             });
         } else {
-            messages.push({ role: "user", content: substituteParams(buildContextBlock(formatElapsed(elapsedMs ?? 0), mode)) });
+            messages.push({ role: "user", content: substituteParams(buildContextBlock(mode)) });
             // Current tracked state BEFORE the last exchange, in its own user
             // message (see the roles-mode comment above for the rationale).
             messages.push({ role: "user", content: buildCurrentStateBlock() });
-            messages.push({ role: "user", content: substituteParams(buildExchangesBlock()) });
+            messages.push({ role: "user", content: substituteParams(buildExchangesBlock(formatElapsed(elapsedMs ?? 0), mode)) });
         }
 
         if (isCancelled) return { skipped: true, reason: "cancelled" };
