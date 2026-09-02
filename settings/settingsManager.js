@@ -11,7 +11,7 @@ export const defaultSettings = {
     showProgressBar: false, // Show the floating progress bar while the tracker runs
     autoRunInterval: 1, // Run every X turns (a turn = one user+AI exchange)
     delayTrigger: 0, // Seconds to wait before sending the tracker request
-    contextDepth: 2, // How many past messages are sent to the tracker FOR CONTEXT ONLY
+    contextDepth: 6, // How many past messages are sent to the tracker FOR CONTEXT ONLY
     minMessageLength: 50, // Skip tracker runs on very short AI messages
     injectFormat: "full", // "full" = wrapped with explanation; "raw" = bare block; "none" = not injected
     notificationLevel: "reduced", // "all" | "reduced" | "none"
