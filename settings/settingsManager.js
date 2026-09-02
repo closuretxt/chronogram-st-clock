@@ -13,8 +13,6 @@ export const defaultSettings = {
     delayTrigger: 0, // Seconds to wait before sending the tracker request
     contextDepth: 2, // How many past messages are sent to the tracker FOR CONTEXT ONLY
     minMessageLength: 50, // Skip tracker runs on very short AI messages
-    minMinutesPerTurn: 1, // Floor for story-time advance between two runs
-    maxAdvanceHours: 48, // Cap on story-time advance per single run (anti-idle-jump guard)
     injectFormat: "full", // "full" = wrapped with explanation; "raw" = bare block; "none" = not injected
     notificationLevel: "reduced", // "all" | "reduced" | "none"
     trackerProfile: "", // Connection Manager profile id used for the tracker LLM ("" = same as current)
@@ -84,7 +82,7 @@ export function initSettingsListeners() {
     $("#chrono_profile").on("change", saveSettings);
 
     // Debounced saving for number/text fields (also fires on blur/change).
-    $("#chrono_auto_run_interval, #chrono_context_depth, #chrono_min_message_length, #chrono_delay_trigger, #chrono_min_minutes_turn, #chrono_max_advance_hours")
+    $("#chrono_auto_run_interval, #chrono_context_depth, #chrono_min_message_length, #chrono_delay_trigger")
         .on("input change blur", debounce(saveSettings));
 }
 
@@ -109,8 +107,6 @@ export function saveSettings() {
     s.contextDepth = Math.max(0, parseInt($("#chrono_context_depth").val(), 10) || 10);
     s.minMessageLength = Math.max(0, parseInt($("#chrono_min_message_length").val(), 10) || 50);
     s.delayTrigger = Math.min(300, Math.max(0, parseFloat($("#chrono_delay_trigger").val()) || 0));
-    s.minMinutesPerTurn = Math.max(0, parseFloat($("#chrono_min_minutes_turn").val()) || 10);
-    s.maxAdvanceHours = Math.max(0, parseFloat($("#chrono_max_advance_hours").val()) || 24);
     s.injectFormat = ["full", "raw", "none"].includes($("#chrono_inject_format").val())
         ? $("#chrono_inject_format").val() : "full";
     s.notificationLevel = String($("#chrono_notification_level").val() || "reduced");
@@ -141,8 +137,6 @@ export function applySettingsToUI() {
     $("#chrono_context_depth").val(s.contextDepth ?? 10);
     $("#chrono_min_message_length").val(s.minMessageLength ?? 50);
     $("#chrono_delay_trigger").val(s.delayTrigger ?? 0);
-    $("#chrono_min_minutes_turn").val(s.minMinutesPerTurn ?? 10);
-    $("#chrono_max_advance_hours").val(s.maxAdvanceHours ?? 24);
     $("#chrono_inject_format").val(s.injectFormat || "full");
     $("#chrono_notification_level").val(s.notificationLevel || "reduced");
 

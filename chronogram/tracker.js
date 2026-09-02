@@ -21,7 +21,6 @@ import {
     getStateRoot,
     getClock,
     setClock,
-    tickClock,
     advanceClock,
     getOrCreateParticipant,
     getParticipants,
@@ -33,7 +32,6 @@ import {
     addObjective,
     updateObjective,
     setObjectiveStatus,
-    formatElapsed,
     createSnapshot,
     restoreSnapshot,
     saveState,
@@ -83,20 +81,6 @@ function getAutoRunInterval() {
     return Math.max(1, parseInt(settings.autoRunInterval, 10) || 1);
 }
 
-// Story-time that passed since the previous tracked moment. Simple rules:
-// real time between runs, floored by minMinutesPerTurn and capped by
-// maxAdvanceHours (so an AFK night doesn't skip a year by accident).
-function computeElapsedMs() {
-    const settings = extension_settings[extensionName] || {};
-    const root = getStateRoot();
-    if (!root?.lastRunAt) return null;
-    let ms = Date.now() - root.lastRunAt;
-    const floorMs = Math.max(0, Number(settings.minMinutesPerTurn) || 0) * 60000;
-    const capMs = Math.max(0, Number(settings.maxAdvanceHours) || 0) * 3600000;
-    if (ms < floorMs) ms = floorMs;
-    if (capMs > 0 && ms > capMs) ms = capMs;
-    return ms;
-}
 
 // ---------------------------------------------------------------------------
 // Prompt building
@@ -137,7 +121,10 @@ function buildCurrentStateBlock() {
                     if (sched.length > 0) {
                         for (const e of sched) lines.push(`${e.time} ${stripCurrentMarker(e.activity)}`);
                     } else {
-                        lines.push("(no schedule for today)");
+                        // Explicit demand instead of a passive note: without
+                        // it a character that lost its schedule to a reset or
+                        // rollback stayed "open" until the NEXT date change.
+                        lines.push(`NO CHRONOGRAM for ${clock.date} - build a full schedule for this character in a <new_schedule> (Date:${clock.date}) this run.`);
                     }
                 }
                 lines.push(`</participant>`);
@@ -207,18 +194,15 @@ function messageRole(m) {
     return m.is_user ? "user" : "assistant";
 }
 
-// The header line that accompanies the exchange to analyze. Setup announces
-// the first run; normal runs report the REAL-WORLD time between runs - kept
-// next to <last_turn> and explicitly framed as metadata so the model can't
-// mistake it for story time belonging to earlier turns (which produced
-// nonsensical timeskips for the previous exchanges).
-function buildContextHeader(elapsedText, mode) {
+// The header line that accompanies the exchange to analyze: setup announces
+// the first run. Real-world time between runs is deliberately NOT sent - the
+// LLM judges story time from the fiction alone; the elapsed clamps only act
+// as the deterministic fallback tick when it emits nothing parseable.
+function buildContextHeader(mode) {
     if (mode === "setup") {
         return "This is the FIRST Chronogram run for this chat: establish the clock, participants and schedules (see SETUP mode in your instructions).";
     }
-    return elapsedText
-        ? `Note: ${elapsedText} of REAL-WORLD time passed between tracker runs (NOT story time - never report it as a delta). The story-time delta comes ONLY from the events in <last_turn>.`
-        : "";
+    return "";
 }
 
 // Wording for the <last_tracked_turn> tag: the FROM anchor - the PREVIOUS
@@ -250,14 +234,13 @@ function buildContextBlock(mode) {
 // The TO anchor: the NEW, untracked exchange. Sent as a separate user message
 // AFTER the <chronogram_state> block, so the model reads "here is where the
 // clock stands" first and then the exchange (user + assistant turns) that
-// advances it. The elapsed-time note rides along HERE (not on the context
-// block) so it sits exactly where the delta is judged.
-function buildExchangesBlock(elapsedText, mode) {
+// advances it.
+function buildExchangesBlock(mode) {
     const { target } = getContextMessages();
     const targetLines = target.map(messageLine).join("\n\n");
 
     const lines = [];
-    const header = buildContextHeader(elapsedText, mode);
+    const header = buildContextHeader(mode);
     if (header) lines.push(header);
     lines.push(`<exchanges_to_analyze>\nTO (analyze this): everything inside <last_turn> is NEW and NOT yet tracked - the ONLY exchange that advances the clock:\n<last_turn>\n${targetLines || "(no messages)"}\n</last_turn>\n</exchanges_to_analyze>`);
     return lines.join("\n\n");
@@ -396,7 +379,7 @@ async function requestTracker(messages, connectionProfileId) {
 
 // Applies one parsed update object to the state. Returns a summary for
 // notifications.
-function applyUpdate(update, elapsedMs) {
+function applyUpdate(update) {
     const beforeClock = getClock();
     const event = {
         oldDate: beforeClock?.date || null,
@@ -409,9 +392,9 @@ function applyUpdate(update, elapsedMs) {
         abandonedObjectives: [],
     };
 
-    // 1. Clock. LLM is authoritative; deterministic tick is the fallback.
-    // Normal runs report a DELTA (time passed since the state clock); setup
-    // runs (and any absolute leftover) carry Date/Time directly.
+    // 1. Clock. The LLM is the ONLY source of time: setup runs (and any
+    // absolute leftover) carry Date/Time directly; normal runs report a DELTA
+    // (time passed since the state clock). No valid value = no advance.
     if (update.clock) {
         if (update.clock.date && update.clock.time) {
             setClock(update.clock.date, update.clock.time);
@@ -422,15 +405,7 @@ function applyUpdate(update, elapsedMs) {
             setClock(advanced.date, advanced.time);
             event.newDate = advanced.date;
             event.newTime = advanced.time;
-        } else if (elapsedMs !== null) {
-            const ticked = tickClock(elapsedMs);
-            event.newDate = ticked?.date ?? null;
-            event.newTime = ticked?.time ?? null;
         }
-    } else if (elapsedMs !== null) {
-        const ticked = tickClock(elapsedMs);
-        event.newDate = ticked?.date ?? null;
-        event.newTime = ticked?.time ?? null;
     }
 
     // 2. Schedules: only when character tracking is enabled.
@@ -577,7 +552,6 @@ export async function runTracker(messageId = null, options = {}) {
     try {
         const root = getStateRoot();
         const mode = root.anchored ? "normal" : "setup";
-        const elapsedMs = mode === "normal" ? computeElapsedMs() : null;
 
         // Presence pass: archive participants no longer mentioned in the
         // recent context so the tracker state only lists who is present.
@@ -638,7 +612,7 @@ export async function runTracker(messageId = null, options = {}) {
                 messages.push({ role: messageRole(m), content: messageLine(m) });
             }
             messages.push({ role: "system", content: "</last_turn>" });
-            const header = buildContextHeader(formatElapsed(elapsedMs ?? 0), mode);
+            const header = buildContextHeader(mode);
             messages.push({
                 role: "user",
                 content: `${header ? header + "\n\n" : ""}<exchanges_to_analyze>\nTO (analyze this): the exchange above, wrapped in <last_turn>, is NEW and NOT yet tracked.\n</exchanges_to_analyze>`,
@@ -648,7 +622,7 @@ export async function runTracker(messageId = null, options = {}) {
             // Current tracked state BEFORE the last exchange, in its own user
             // message (see the roles-mode comment above for the rationale).
             messages.push({ role: "user", content: buildCurrentStateBlock() });
-            messages.push({ role: "user", content: substituteParams(buildExchangesBlock(formatElapsed(elapsedMs ?? 0), mode)) });
+            messages.push({ role: "user", content: substituteParams(buildExchangesBlock(mode)) });
         }
 
         if (isCancelled) return { skipped: true, reason: "cancelled" };
@@ -675,7 +649,7 @@ export async function runTracker(messageId = null, options = {}) {
             return { skipped: true, reason: "no_updates" };
         }
 
-        const event = applyUpdate(update, elapsedMs);
+        const event = applyUpdate(update);
 
         pipelineBar.complete();
         barCompleted = true;
@@ -806,23 +780,10 @@ export function clearMessageSnapshot(messageId) {
 
 export function restoreStateUpTo(messageId) {
     const st = getST();
-    // The restored snapshot carries the lastRunAt of the run that CREATED it,
-    // which can be much older than the most recent actual tracking event.
-    // Example (swipe): snapshot@N-2 was written at T1, the pre-swipe run on N
-    // re-anchored lastRunAt to T2 > T1; rolling back restores the T1 stamp.
-    // The next run would then compute "Time Passed" as now - T1 - inflated by
-    // the whole lifetime of the DISCARDED run - and jump the clock forward.
-    // Keeping the newer stamp keeps the elapsed-time hint honest.
-    const currentLastRunAt = getStateRoot()?.lastRunAt ?? null;
     for (let i = messageId; i >= 0; i--) {
         const snap = st.chat?.[i]?.extra?.chrono_snapshot;
         if (snap) {
             restoreSnapshot(snap);
-            const root = getStateRoot();
-            if (currentLastRunAt !== null && currentLastRunAt > (root?.lastRunAt ?? 0)) {
-                root.lastRunAt = currentLastRunAt;
-                saveState();
-            }
             return true;
         }
     }

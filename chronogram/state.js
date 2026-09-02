@@ -80,18 +80,6 @@ export function advanceClock(clock, ms) {
     return clampClockToDate(new Date(base.getTime() + ms));
 }
 
-// Formats a duration as compact shorthand: "1d 3h 45m".
-export function formatElapsed(ms) {
-    const mins = Math.max(0, Math.round(ms / 60000));
-    const days = Math.floor(mins / 1440);
-    const hours = Math.floor((mins % 1440) / 60);
-    const minutes = mins % 60;
-    const parts = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
-    return parts.join(" ");
-}
 
 // Any owner reported by the LLM that means the user ("User", "{{user}}",
 // "You", or literally the current persona's name) resolves to the reserved
@@ -144,7 +132,6 @@ function defaultRoot() {
         participants: {}, // id -> { name, active }
         schedules: {}, // ownerId -> { [dateStr]: [{ time, activity }] }
         objectives: [], // long-term objectives across days
-        lastRunAt: null, // epoch ms of the previously tracked moment
         timeLocked: false, // true = freeze the clock, skip all automatic runs
     };
 }
@@ -344,12 +331,6 @@ export function setClock(date, time) {
     if (!root) return null;
     root.clock = { date: String(date).trim(), time: String(time).trim() };
     root.anchored = true;
-    // A clock set (manually via the panel, or by the tracker) becomes the new
-    // "previously tracked moment": the NEXT run's elapsed-time computation
-    // must measure from HERE, not from the previous automatic run. Without
-    // this, a manual edit doesn't move the tracker's reference point and the
-    // LLM advances the clock relative to the pre-edit timeline.
-    root.lastRunAt = Date.now();
     saveState();
     return root.clock;
 }
@@ -368,16 +349,6 @@ export function setTimeLocked(locked) {
     return root.timeLocked;
 }
 
-// Deterministic fallback when the LLM reports no <clock_update>:
-// simply push the stored clock forward by `ms`.
-export function tickClock(ms) {
-    const root = getStateRoot();
-    if (!root?.clock) return null;
-    root.clock = advanceClock(root.clock, ms);
-    root.lastRunAt = Date.now(); // this run just re-anchored the timeline
-    saveState();
-    return root.clock;
-}
 
 // ---------------------------------------------------------------------------
 // Schedules (per participant, per date)
@@ -521,7 +492,6 @@ export function createSnapshot() {
         participants: root.participants,
         schedules: root.schedules,
         objectives: root.objectives,
-        lastRunAt: root.lastRunAt,
         timeLocked: root.timeLocked,
     }));
 }
@@ -540,7 +510,6 @@ export function restoreSnapshot(snapshot) {
     current.participants = snapshot.participants || {};
     current.schedules = snapshot.schedules || {};
     current.objectives = Array.isArray(snapshot.objectives) ? snapshot.objectives : [];
-    current.lastRunAt = snapshot.lastRunAt ?? null;
     current.timeLocked = snapshot.timeLocked === true;
     saveState();
 }
