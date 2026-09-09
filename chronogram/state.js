@@ -366,18 +366,55 @@ export function stripCurrentMarker(text) {
         .trim();
 }
 
+// Maximum year distance from the world clock before a stored date is treated
+// as a model typo. Models occasionally slip real-world years ("02/07/2024")
+// into a fantasy timeline ("1420"); left alone, such junk dates sort as the
+// NEWEST plans and pruneSchedules then deletes freshly stored real schedules.
+const YEAR_SANITY_TOLERANCE = 10;
+
+// Repairs a date whose year is implausibly far from the clock year, keeping
+// month/day. Returns the corrected "MM/DD/YYYY" (or the input when sane).
+function repairYearAgainstClock(root, dateStr) {
+    const clockYear = parseInt(String(root.clock?.date || "").match(/(\d{4})\s*$/)?.[1], 10);
+    if (!Number.isFinite(clockYear)) return dateStr;
+    const m = String(dateStr).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return dateStr;
+    const year = parseInt(m[3], 10);
+    if (Math.abs(year - clockYear) <= YEAR_SANITY_TOLERANCE) return dateStr;
+    return `${m[1].padStart(2, "0")}/${m[2].padStart(2, "0")}/${clockYear}`;
+}
+
+// Heals legacy junk years already sitting in state (runs before pruning so
+// the sort below compares dates from the same timeline).
+function repairAnomalousScheduleYears(root) {
+    let touched = false;
+    for (const dates of Object.values(root.schedules)) {
+        for (const dateStr of Object.keys(dates)) {
+            const fixed = repairYearAgainstClock(root, dateStr);
+            if (fixed === dateStr) continue;
+            if (!(fixed in dates)) dates[fixed] = dates[dateStr];
+            delete dates[dateStr];
+            touched = true;
+        }
+    }
+    return touched;
+}
+
 // entries: [{time, activity}] sorted by parsed time-of-day.
 export function replaceSchedule(ownerId, dateStr, entries) {
     const root = getStateRoot();
     if (!root) return;
     const id = resolveOwnerId(ownerId);
     if (!isValidDateString(dateStr)) return;
+    // Guard at the source: a schedule dated e.g. "02/07/2024" in a 1420
+    // timeline would win every future prune as the "newest" plan.
+    const saneDate = repairYearAgainstClock(root, dateStr);
     const clean = (Array.isArray(entries) ? entries : [])
         .map(e => ({ time: String(e.time || "").trim(), activity: stripCurrentMarker(e.activity) }))
         .filter(e => e.time && e.activity)
         .sort((a, b) => (parseTimeHM(a.time) ?? 0) - (parseTimeHM(b.time) ?? 0));
     root.schedules[id] = root.schedules[id] || {};
-    root.schedules[id][dateStr.trim()] = clean;
+    root.schedules[id][saneDate.trim()] = clean;
     saveState();
 }
 
@@ -390,11 +427,17 @@ export function getScheduleFor(ownerId, dateStr) {
 export function pruneSchedules(keepCount = 2) {
     const root = getStateRoot();
     if (!root) return;
+    // Heal junk years FIRST: "02/07/2024" in a 1420 timeline otherwise sorts
+    // as the newest plan and gets real schedules pruned in its place.
+    if (repairAnomalousScheduleYears(root)) saveState();
+    const clockMs = parseDateMDY(root.clock?.date)?.getTime() ?? null;
     for (const owner of Object.keys(root.schedules)) {
         const dates = Object.keys(root.schedules[owner]);
         if (dates.length <= keepCount) continue;
         dates.sort((a, b) => (parseDateMDY(a)?.getTime() ?? 0) - (parseDateMDY(b)?.getTime() ?? 0));
         for (const stale of dates.slice(0, dates.length - keepCount)) {
+            // Never prune the current clock date, whatever it compares to.
+            if (clockMs !== null && parseDateMDY(stale)?.getTime() === clockMs) continue;
             delete root.schedules[owner][stale];
         }
     }

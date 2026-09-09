@@ -29,6 +29,7 @@ import {
     replaceSchedule,
     pruneSchedules,
     getScheduleFor,
+    getSchedules,
     addObjective,
     updateObjective,
     setObjectiveStatus,
@@ -381,6 +382,17 @@ async function requestTracker(messages, connectionProfileId) {
 // notifications.
 function applyUpdate(update) {
     const beforeClock = getClock();
+    logDebug("Chronogram applyUpdate: parsed input =",
+        JSON.stringify({
+            clock: update.clock,
+            schedules: update.schedules.map(s => ({ owner: s.ownerId, date: s.date, entries: s.entries.length })),
+            newObjectives: update.newObjectives.length,
+            updateObjectives: update.updateObjectives.length,
+            completeTitles: update.completeTitles.length,
+            abandonTitles: update.abandonTitles.length,
+        }),
+        "| trackCharacters =", (extension_settings[extensionName] || {}).trackCharacters,
+        "| beforeClock =", JSON.stringify(beforeClock));
     const event = {
         oldDate: beforeClock?.date || null,
         newDate: null,
@@ -417,8 +429,13 @@ function applyUpdate(update) {
             getOrCreateParticipant(sched.ownerId, sched.displayName);
             replaceSchedule(sched.ownerId, sched.date, sched.entries);
             event.schedules++;
+            logDebug(`Chronogram applyUpdate: stored schedule for "${sched.ownerId}" on ${sched.date} (${sched.entries.length} entries).`);
         }
         pruneSchedules(2);
+        logDebug("Chronogram applyUpdate: schedule dates in state now =",
+            JSON.stringify(Object.fromEntries(Object.entries(getSchedules()).map(([id, dates]) => [id, Object.keys(dates)]))));
+    } else {
+        logDebug("Chronogram applyUpdate: SKIPPED schedules (trackCharacters is false).");
     }
 
     // 4. Objectives: only when objective tracking is enabled.
@@ -500,6 +517,7 @@ export async function runTracker(messageId = null, options = {}) {
         logDebug("Chronogram already running; skipping.");
         return { skipped: true, reason: "busy" };
     }
+    logDebug(`Chronogram run started (messageId=${messageId}, manual=${options.manual === true}).`);
 
     const st = getST();
     const startId = messageId ?? (st.chat?.length ?? 1) - 1;
@@ -529,6 +547,7 @@ export async function runTracker(messageId = null, options = {}) {
         break;
     }
     if (effectiveMessageId < 0) {
+        logDebug("Chronogram run skipped: not_ai_message.");
         return { skipped: true, reason: "not_ai_message" };
     }
     if (effectiveMessageId === lastRunMessageId) {
@@ -650,6 +669,9 @@ export async function runTracker(messageId = null, options = {}) {
         }
 
         const event = applyUpdate(update);
+        logDebug("Chronogram run applied. Event =",
+            JSON.stringify({ oldDate: event.oldDate, newDate: event.newDate, newTime: event.newTime, schedules: event.schedules }),
+            "| clock after =", JSON.stringify(getClock()));
 
         pipelineBar.complete();
         barCompleted = true;
