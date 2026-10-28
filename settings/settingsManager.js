@@ -8,12 +8,15 @@ export const defaultSettings = {
     autorun: true, // Run the tracker automatically after AI messages
     trackCharacters: true, // Track per-character activities + daily chronograms
     trackObjectives: true, // Track long-term objectives
+    trackCharacterSchedules: true, // Off = only {{user}} gets a daily schedule (no per-character schedules)
     showProgressBar: false, // Show the floating progress bar while the tracker runs
     autoRunInterval: 1, // Run every X turns (a turn = one user+AI exchange)
     delayTrigger: 0, // Seconds to wait before sending the tracker request
     contextDepth: 6, // How many past messages are sent to the tracker FOR CONTEXT ONLY
     minMessageLength: 50, // Skip tracker runs on very short AI messages
     injectFormat: "full", // "full" = wrapped with explanation; "raw" = bare block; "none" = not injected
+    injectScheduleDetail: "full", // "full" = Now + Next + rest of day; "next" = Now + Next; "nextOnly" = Next only; "stable" = whole day, no Now/Next, never trimmed
+    splitTimeMacro: false, // Date/Time go to {{chronogram_time}} instead of {{chronogram}} (keeps {{chronogram}} cache-stable)
     notificationLevel: "reduced", // "all" | "reduced" | "none"
     trackerProfile: "", // Connection Manager profile id used for the tracker LLM ("" = same as current)
     legacy_api: false, // Swaps connection profiles via slash command before the request
@@ -77,8 +80,8 @@ function debounce(fn) {
 }
 
 export function initSettingsListeners() {
-    $("#chrono_enabled, #chrono_autorun, #chrono_track_characters, #chrono_track_objectives, #chrono_show_progress_bar, #chrono_legacy_api, #chrono_debug_mode, #chrono_include_persona, #chrono_include_scenario, #chrono_include_char_card, #chrono_include_world_info, #chrono_include_wi_outlets, #chrono_context_as_roles").on("change", saveSettings);
-    $("#chrono_inject_format, #chrono_notification_level").on("change", saveSettings);
+    $("#chrono_enabled, #chrono_autorun, #chrono_track_characters, #chrono_track_objectives, #chrono_track_char_schedules, #chrono_split_time_macro, #chrono_show_progress_bar, #chrono_legacy_api, #chrono_debug_mode, #chrono_include_persona, #chrono_include_scenario, #chrono_include_char_card, #chrono_include_world_info, #chrono_include_wi_outlets, #chrono_context_as_roles").on("change", saveSettings);
+    $("#chrono_inject_format, #chrono_schedule_detail, #chrono_notification_level").on("change", saveSettings);
     $("#chrono_profile").on("change", saveSettings);
 
     // Debounced saving for number/text fields (also fires on blur/change).
@@ -94,6 +97,8 @@ export function saveSettings() {
     s.autorun = $("#chrono_autorun").prop("checked");
     s.trackCharacters = $("#chrono_track_characters").prop("checked");
     s.trackObjectives = $("#chrono_track_objectives").prop("checked");
+    s.trackCharacterSchedules = $("#chrono_track_char_schedules").prop("checked");
+    s.splitTimeMacro = $("#chrono_split_time_macro").prop("checked");
     s.showProgressBar = $("#chrono_show_progress_bar").prop("checked");
     s.legacy_api = $("#chrono_legacy_api").prop("checked");
     s.debug_mode = $("#chrono_debug_mode").prop("checked");
@@ -109,6 +114,8 @@ export function saveSettings() {
     s.delayTrigger = Math.min(300, Math.max(0, parseFloat($("#chrono_delay_trigger").val()) || 0));
     s.injectFormat = ["full", "raw", "none"].includes($("#chrono_inject_format").val())
         ? $("#chrono_inject_format").val() : "full";
+    s.injectScheduleDetail = ["full", "next", "nextOnly", "stable"].includes($("#chrono_schedule_detail").val())
+        ? $("#chrono_schedule_detail").val() : "full";
     s.notificationLevel = String($("#chrono_notification_level").val() || "reduced");
     s.trackerProfile = String($("#chrono_profile").val() || "");
 
@@ -124,6 +131,8 @@ export function applySettingsToUI() {
     $("#chrono_autorun").prop("checked", s.autorun === true);
     $("#chrono_track_characters").prop("checked", s.trackCharacters !== false);
     $("#chrono_track_objectives").prop("checked", s.trackObjectives !== false);
+    $("#chrono_track_char_schedules").prop("checked", s.trackCharacterSchedules !== false);
+    $("#chrono_split_time_macro").prop("checked", s.splitTimeMacro === true);
     $("#chrono_show_progress_bar").prop("checked", s.showProgressBar !== false);
     $("#chrono_legacy_api").prop("checked", s.legacy_api === true);
     $("#chrono_debug_mode").prop("checked", s.debug_mode === true);
@@ -138,6 +147,7 @@ export function applySettingsToUI() {
     $("#chrono_min_message_length").val(s.minMessageLength ?? 50);
     $("#chrono_delay_trigger").val(s.delayTrigger ?? 0);
     $("#chrono_inject_format").val(s.injectFormat || "full");
+    $("#chrono_schedule_detail").val(s.injectScheduleDetail || "full");
     $("#chrono_notification_level").val(s.notificationLevel || "reduced");
 
     populateConnectionDropdown($("#chrono_profile"), s.trackerProfile);

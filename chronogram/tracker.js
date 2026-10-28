@@ -95,7 +95,11 @@ function buildCurrentStateBlock() {
     const clock = getClock();
     // Only participants still present in the story context reach the tracker:
     // archived ones keep their data but are invisible until they reappear.
-    const participants = trackCharacters ? getActiveParticipants() : {};
+    let participants = trackCharacters ? getActiveParticipants() : {};
+    // Character-specific schedules off: only {{user}} is scheduled.
+    if (settings.trackCharacterSchedules === false) {
+        participants = participants.user ? { user: participants.user } : {};
+    }
     const objectives = (getStateRoot()?.objectives || []);
     const lines = [];
 
@@ -423,9 +427,14 @@ function applyUpdate(update) {
     // 2. Schedules: only when character tracking is enabled.
     const trackCharacters = (extension_settings[extensionName] || {}).trackCharacters !== false;
     const trackObjectives = (extension_settings[extensionName] || {}).trackObjectives !== false;
+    const userScheduleOnly = (extension_settings[extensionName] || {}).trackCharacterSchedules === false;
 
     if (trackCharacters) {
         for (const sched of update.schedules) {
+            if (userScheduleOnly && sched.ownerId !== "user") {
+                logDebug(`Chronogram applyUpdate: SKIPPED schedule for "${sched.ownerId}" (character-specific schedules disabled).`);
+                continue;
+            }
             getOrCreateParticipant(sched.ownerId, sched.displayName);
             replaceSchedule(sched.ownerId, sched.date, sched.entries);
             event.schedules++;
@@ -593,6 +602,7 @@ export async function runTracker(messageId = null, options = {}) {
             { role: "system", content: substituteParams(getChronoPrompt(mode, {
                 trackCharacters: settings.trackCharacters !== false,
                 trackObjectives: settings.trackObjectives !== false,
+                userScheduleOnly: settings.trackCharacterSchedules === false,
             })) },
         ];
 

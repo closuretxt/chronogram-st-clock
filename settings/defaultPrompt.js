@@ -39,7 +39,16 @@ Date:00/00/0000
 </new_schedule>
 8-15 entries spanning waking to sleep. EVERY entry concrete: task, place, company, purpose - rooted in the character's role, habits and objectives. Never generic filler like "spends the day busy". {{user}} gets one too, even a loose one. Never tag an entry as current. Always a real 4-digit year in Date: - never "YYYY".`;
 
-const OUTPUT_OBJECTIVES = `SUBSTANTIAL long-term goals only: story-shaping, with real stakes, spanning multiple scenes or days (quests, debts, rivalries, secrets, careers). Creating NONE is preferred over creating filler. No errands, nothing resolvable within the current scene, no vague flavor goals.
+// Character-specific schedules disabled: only {{user}} keeps a chronogram.
+const OUTPUT_SCHEDULE_USER_ONLY = `One <new_schedule> for {{user}} ONLY (Owner:User) whenever their schedule for the CURRENT clock date is missing - either because the clock crosses into a NEW calendar date, or because <chronogram_state> marks them with NO CHRONOGRAM. Character-specific schedules are DISABLED: never emit <new_schedule> for any other character.
+<new_schedule>
+Owner:User
+Date:00/00/0000
+07:00 wakes up
+</new_schedule>
+8-15 entries spanning waking to sleep. EVERY entry concrete: task, place, company, purpose. Never generic filler like "spends the day busy". Never tag an entry as current. Always a real 4-digit year in Date: - never "YYYY".`;
+
+const OUTPUT_OBJECTIVES =`SUBSTANTIAL long-term goals only: story-shaping, with real stakes, spanning multiple scenes or days (quests, debts, rivalries, secrets, careers). Creating NONE is preferred over creating filler. No errands, nothing resolvable within the current scene, no vague flavor goals.
 <new_objective>
 Owner:Aldric
 Title:Recover the family sword
@@ -71,6 +80,9 @@ const OBJECTIVES_DISABLED_NOTE = `Objective tracking is DISABLED: never emit <ne
 const SETUP_RULES = `## SETUP (first run of this chat)
 Infer the current in-fiction date/time from the story so far (default mid-day 12:00) and emit its clock_update. Establish every character present in the opening scene plus "User" with a full schedule for today each. Add any objective genuinely grounded in the fiction - or none.`;
 
+const SETUP_RULES_USER_ONLY = `## SETUP (first run of this chat)
+Infer the current in-fiction date/time from the story so far (default mid-day 12:00) and emit its clock_update. Establish "User" with a full schedule for today (no schedules for other characters). Add any objective genuinely grounded in the fiction - or none.`;
+
 // Describes how each request is laid out so the model knows where to look.
 // The request is split into three explicit regions - CONTEXT (reference
 // only), FROM (the already-tracked anchor) and TO (the new exchange) - so
@@ -83,10 +95,11 @@ Each request is split into three clearly separated regions:
 const NORMAL_RULES = `## TRACKING
 Compare FROM to TO: the clock stands at the END of <last_tracked_turn> (as shown in <chronogram_state>); measure ONLY what happens inside <last_turn> and emit it as the clock_update delta (Days/Hours/Minutes). Never count earlier turns or context history as elapsed story time. DEFAULT TO MINUTES: a normal exchange is 1-5 minutes; Hours only for an explicit time skip (travel, sleep, waiting, scene break), Days only for an explicit day transition. EVERY character marked PRESENT in <chronogram_state> must end the run with a schedule for the date AFTER the advance: emit <new_schedule> when the clock crosses into a NEW calendar date OR when a character is marked NO CHRONOGRAM - a new schedule's Date: is always that post-advance date. Maintain objectives. A quiet continuation still emits clock_update (it may be all zeros). Leave off-screen characters untouched.`;
 
-export function getChronoPrompt(mode, { trackCharacters = true, trackObjectives = true } = {}) {
-    const header = `Silent bookkeeper for this roleplay. You never write story content or commentary. You maintain the world clock, the daily chronograms of PRESENT characters, and long-term objectives for {{user}} ("User") and the characters.`;
+export function getChronoPrompt(mode, { trackCharacters = true, trackObjectives = true, userScheduleOnly = false } = {}) {
+    const userOnly = trackCharacters && userScheduleOnly;
+    const header = `Silent bookkeeper for this roleplay. You never write story content or commentary. You maintain the world clock, the daily chronograms of ${userOnly ? '{{user}} ("User")' : "PRESENT characters"}, and long-term objectives for {{user}} ("User") and the characters.`;
 
-    const rules = mode === "setup" ? SETUP_RULES : NORMAL_RULES;
+    const rules = mode === "setup" ? (userOnly ? SETUP_RULES_USER_ONLY : SETUP_RULES) : NORMAL_RULES;
 
     // Compose the output format from the enabled tracking modules only, so a
     // disabled module is never even requested from the tracker LLM.
@@ -94,7 +107,7 @@ export function getChronoPrompt(mode, { trackCharacters = true, trackObjectives 
     // every normal run reports a delta relative to the current state clock.
     const sections = [OUTPUT_HEADER, mode === "setup" ? OUTPUT_CLOCK_SETUP : OUTPUT_CLOCK_DELTA];
     if (trackCharacters) {
-        sections.push(OUTPUT_SCHEDULE);
+        sections.push(userOnly ? OUTPUT_SCHEDULE_USER_ONLY : OUTPUT_SCHEDULE);
     } else {
         sections.push(CHARACTERS_DISABLED_NOTE);
     }

@@ -39,6 +39,10 @@
                     <input type="checkbox" id="chrono_track_characters" />
                     <span>Track Characters & Schedules</span>
                 </label>
+                <label class="checkbox_label" title="Give every present character their own daily schedule. Off = only {{user}} gets a schedule; other characters are neither scheduled by the tracker nor injected">
+                    <input type="checkbox" id="chrono_track_char_schedules" />
+                    <span>Character-Specific Schedules</span>
+                </label>
                 <label class="checkbox_label" title="Track long-term objectives. Off = no objectives in the injection, the drawer or the tracker (clock and characters still work)">
                     <input type="checkbox" id="chrono_track_objectives" />
                     <span>Track Objectives</span>
@@ -60,6 +64,19 @@
                         <option value="none">None</option>
                     </select>
                 </div>
+                <div class="flex-container alignitemscenter" style="margin: 8px 0;" title="How much of each schedule is injected: Full = current activity, next item and the rest of the day; Now + Next = current activity and next item; Next Only = just the next planned item; Stable = every task of the day with no Now/Next, never trimmed as time passes (changes only when a new schedule is built, best for prompt caching)">
+                    <span style="min-width: 160px;">Schedule Detail:</span>
+                    <select id="chrono_schedule_detail" class="text_pole flex1">
+                        <option value="full">Full day</option>
+                        <option value="next">Now + Next</option>
+                        <option value="nextOnly">Next only</option>
+                        <option value="stable">Stable (whole day)</option>
+                    </select>
+                </div>
+                <label class="checkbox_label" title="Move Date/Time out of {{chronogram}} into a separate {{chronogram_time}} macro. Place {{chronogram}} early in the prompt and {{chronogram_time}} late so the clock ticking every turn doesn't invalidate the prompt cache">
+                    <input type="checkbox" id="chrono_split_time_macro" />
+                    <span>Split time into {{chronogram_time}}</span>
+                </label>
 
                 <div class="inline-drawer">
                     <div class="inline-drawer-toggle inline-drawer-header">

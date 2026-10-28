@@ -31,6 +31,8 @@ jQuery(async () => {
     loadSettings();
     applySettingsToUI();
     initSettingsListeners();
+    // Tracking toggles change what the drawer shows; re-render right away.
+    $("#chrono_track_characters, #chrono_track_objectives, #chrono_track_char_schedules").on("change", () => refreshChronoPanel());
     registerInjectionMacro();
     initPanelHandlers();
     refreshChronoPanel();

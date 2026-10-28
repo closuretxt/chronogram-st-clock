@@ -24,12 +24,13 @@ import {
     isTimeLocked,
     setTimeLocked,
 } from "./state.js";
-import { DEFAULT_INJECTION_INTRO } from "../settings/defaultInjection.js";
+import { DEFAULT_INJECTION_INTRO, buildInjectionIntro } from "../settings/defaultInjection.js";
 import { updateLatestSnapshot, clearAllSnapshots } from "./tracker.js";
 
 export const extensionName = "Chronogram";
 
 const MACRO_KEY = "chronogram";
+const TIME_MACRO_KEY = "chronogram_time";
 
 function escapeHtml(text) {
     return String(text ?? "")
@@ -51,26 +52,52 @@ function sanitizeTagName(name) {
 // for the tracker prompt) so the format can be tuned without touching logic.
 export { DEFAULT_INJECTION_INTRO };
 
+function getInjectFormat(settings) {
+    return ["full", "raw", "none"].includes(settings.injectFormat) ? settings.injectFormat : "full";
+}
+
+// Builds the {{chronogram_time}} text. Only filled when "Split time" is on;
+// otherwise Date/Time stay inside {{chronogram}} and this macro is empty.
+export function buildTimeInjectionText() {
+    const settings = extension_settings[extensionName] || {};
+    const format = getInjectFormat(settings);
+    if (format === "none" || settings.splitTimeMacro !== true) return "";
+
+    const clock = getClock();
+    if (!clock) return "";
+    const body = `<Date>${clock.date}</Date>\n<Time>${clock.time}</Time>`;
+    if (format === "raw") return body;
+    return `<chronogram_time>\n${body}\n</chronogram_time>`;
+}
+
 // Builds the full injected text for the macro.
 export function buildInjectionText() {
     const settings = extension_settings[extensionName] || {};
-    const format = ["full", "raw", "none"].includes(settings.injectFormat) ? settings.injectFormat : "full";
+    const format = getInjectFormat(settings);
     if (format === "none") return "";
 
     const trackCharacters = settings.trackCharacters !== false;
     const trackObjectives = settings.trackObjectives !== false;
+    const userScheduleOnly = settings.trackCharacterSchedules === false;
+    const splitTime = settings.splitTimeMacro === true;
+    const detail = ["full", "next", "nextOnly", "stable"].includes(settings.injectScheduleDetail) ? settings.injectScheduleDetail : "full";
 
     const clock = getClock();
     const allParticipants = getParticipants();
     // Characters disabled -> no presence pass and no <person> blocks at all.
-    const participants = trackCharacters ? getActiveParticipants() : {};
+    let participants = trackCharacters ? getActiveParticipants() : {};
     if (trackCharacters) updateActiveParticipants();
+    // Character-specific schedules off -> only {{user}}'s schedule is injected.
+    if (userScheduleOnly) {
+        participants = participants.user ? { user: participants.user } : {};
+    }
     const objectives = trackObjectives ? getObjectives() : [];
 
     const lines = [];
     // Minimalism: nothing tracked yet -> emit NOTHING at all (no placeholder
     // Date/Time noise, no wrapper, no intro). The macro simply vanishes.
-    if (clock) {
+    // Split mode: the clock lives in {{chronogram_time}} instead.
+    if (clock && !splitTime) {
         lines.push(`<Date>${clock.date}</Date>`);
         lines.push(`<Time>${clock.time}</Time>`);
     }
@@ -84,6 +111,17 @@ export function buildInjectionText() {
     for (const [id, p] of orderedParticipants) {
         const sched = clock?.date ? getScheduleFor(id, clock.date) : [];
         if (sched.length === 0) continue;
+
+        const tag = `${sanitizeTagName(p.name || id)}_chronogram`;
+
+        // Stable: the whole day, no Now/Next and nothing dropped as time
+        // passes, so the block only changes when a new schedule is built.
+        if (detail === "stable") {
+            lines.push(`<${tag}>`);
+            lines.push(`Plan for today: ${sched.map(e => `${e.time} ${stripCurrentMarker(e.activity)}`).join("; ")}.`);
+            lines.push(`</${tag}>`);
+            continue;
+        }
 
         // Time-aware split: whatever already ended is gone (a 09:00 slot has
         // no business in the prompt at 10:00). The slot still in progress
@@ -101,15 +139,14 @@ export function buildInjectionText() {
         }
 
         const parts = [];
-        if (now) parts.push(`Now: ${stripCurrentMarker(now.activity)}`);
+        if (now && detail !== "nextOnly") parts.push(`Now: ${stripCurrentMarker(now.activity)}`);
         if (upcoming.length > 0) parts.push(`Next: ${upcoming[0].time} ${stripCurrentMarker(upcoming[0].activity)}`);
         const rest = upcoming.slice(1);
-        if (rest.length > 0) {
+        if (rest.length > 0 && detail === "full") {
             parts.push(`Plan for today: ${rest.map(e => `${e.time} ${stripCurrentMarker(e.activity)}`).join("; ")}.`);
         }
         if (parts.length === 0) continue;
 
-        const tag = `${sanitizeTagName(p.name || id)}_chronogram`;
         lines.push(`<${tag}>`);
         lines.push(...parts);
         lines.push(`</${tag}>`);
@@ -135,44 +172,49 @@ export function buildInjectionText() {
     // active objectives): emit nothing rather than an empty wrapper + intro.
     if (!body) return "";
     if (format === "raw") return body;
-    return `<chronogram>\n${DEFAULT_INJECTION_INTRO}\n${body}\n</chronogram>`;
+    const intro = buildInjectionIntro({ split: splitTime, stable: detail === "stable" });
+    return `<chronogram>\n${intro}\n${body}\n</chronogram>`;
 }
 
 // ---------------------------------------------------------------------------
 // Macro registration
 // ---------------------------------------------------------------------------
 
-function registerMacro() {
+function registerMacro(key, description, handler) {
+    const def = {
+        category: macroSystem.category?.MISC ?? "misc",
+        description,
+        handler,
+    };
     try {
-        macroSystem.registry.registerMacro(MACRO_KEY, {
-            category: macroSystem.category?.MISC ?? "misc",
-            description: "Persistent world clock, per-character daily chronograms and long-term objectives tracked by Chronogram.",
-            handler: () => buildInjectionText(),
-        });
+        macroSystem.registry.registerMacro(key, def);
     } catch (e) {
         // Already registered (e.g. hot reload); re-register to refresh the handler.
         try {
-            macroSystem.registry.unregisterMacro(MACRO_KEY);
-            macroSystem.registry.registerMacro(MACRO_KEY, {
-                category: macroSystem.category?.MISC ?? "misc",
-                description: "Persistent world clock, schedules and objectives tracked by Chronogram.",
-                handler: () => buildInjectionText(),
-            });
+            macroSystem.registry.unregisterMacro(key);
+            macroSystem.registry.registerMacro(key, def);
         } catch (e2) {
-            console.warn("[Chronogram] Failed to register {{chronogram}} macro.", e2);
+            console.warn(`[Chronogram] Failed to register {{${key}}} macro.`, e2);
         }
     }
 }
 
 export function registerInjectionMacro() {
-    registerMacro();
+    registerMacro(MACRO_KEY,
+        "Persistent world clock, per-character daily chronograms and long-term objectives tracked by Chronogram.",
+        () => buildInjectionText());
+    registerMacro(TIME_MACRO_KEY,
+        "Chronogram world date/time only (filled when 'Split time into {{chronogram_time}}' is enabled).",
+        () => buildTimeInjectionText());
 }
 
 export function unregisterInjectionMacro() {
-    try {
-        macroSystem.registry.unregisterMacro(MACRO_KEY);
-    } catch {
-        // Not registered; fine.
+    for (const key of [MACRO_KEY, TIME_MACRO_KEY]) {
+        try {
+            macroSystem.registry.unregisterMacro(key);
+        } catch {
+            // Not registered; fine.
+        }
     }
 }
 
@@ -293,7 +335,8 @@ export function renderPanelHTML() {
         <div class="chrono-section-header"><i class="fa-solid fa-user"></i><span>Your Chronogram</span></div>
         ${renderParticipantCard(userEntry[0], userEntry[1])}`;
 
-    const charactersHtml = !trackCharacters ? "" : `
+    // Character-specific schedules off: only {{user}}'s card is shown.
+    const charactersHtml = !trackCharacters || settings.trackCharacterSchedules === false ? "" : `
         <div class="chrono-drawer${_charactersOpen ? "" : " chrono-drawer-closed"}">
             <div class="chrono-drawer-header" id="chrono_characters_header" title="Click to collapse or expand character chronograms">
                 <i class="fa-solid fa-users"></i><span>Characters</span>
